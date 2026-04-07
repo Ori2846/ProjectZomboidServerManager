@@ -21,6 +21,14 @@ class SandboxParseError(ValueError):
     pass
 
 
+@dataclass
+class SandboxDocument:
+    data: dict[str, SandboxValue]
+    comments: dict[str, list[str]]
+    raw_text: str
+    parse_error: str = ""
+
+
 class SandboxParser:
     def __init__(self, text: str):
         self.text = text
@@ -165,6 +173,17 @@ def load_sandbox_document(path: Path) -> tuple[dict[str, SandboxValue], dict[str
     if not path.exists():
         return {}, {}
     return parse_sandbox_document(path.read_text(encoding="utf-8"))
+
+
+def load_sandbox_document_safe(path: Path) -> SandboxDocument:
+    if not path.exists():
+        return SandboxDocument(data={}, comments={}, raw_text="")
+    raw_text = path.read_text(encoding="utf-8")
+    try:
+        data, comments = parse_sandbox_document(raw_text)
+        return SandboxDocument(data=data, comments=comments, raw_text=raw_text)
+    except SandboxParseError as error:
+        return SandboxDocument(data={}, comments={}, raw_text=raw_text, parse_error=str(error))
 
 
 def save_sandbox_vars(path: Path, data: dict[str, SandboxValue]) -> None:

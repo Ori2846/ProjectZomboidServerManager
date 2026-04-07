@@ -8,7 +8,7 @@ from .files import advanced_path, ini_path, load_advanced_contents, parse_ini_fi
 from .logs import current_logs
 from .network import get_access_url
 from .processes import is_server_running
-from .sandbox_vars import flatten_sandbox_fields, load_sandbox_document
+from .sandbox_vars import flatten_sandbox_fields, load_sandbox_document_safe
 from .state import STATE, get_mod_display_names
 
 
@@ -133,8 +133,12 @@ def render_page() -> str:
     ini_document = parse_ini_file(ini_path(server_dir, server_name))
     advanced_contents = load_advanced_contents(server_dir, server_name)
     sandbox_path = advanced_path(server_dir, server_name, "{server}_SandboxVars.lua")
-    sandbox_data, sandbox_comments = load_sandbox_document(sandbox_path)
-    sandbox_fields = flatten_sandbox_fields(sandbox_data, sandbox_comments) if sandbox_data else []
+    sandbox_document = load_sandbox_document_safe(sandbox_path)
+    sandbox_fields = (
+        flatten_sandbox_fields(sandbox_document.data, sandbox_document.comments)
+        if sandbox_document.data and not sandbox_document.parse_error
+        else []
+    )
 
     ini_form = []
     ini_jump_options = []
@@ -337,21 +341,35 @@ def render_page() -> str:
     </form>
     """
 
-    sandbox_body = f"""
-    <form method="post" action="/save-sandbox">
-      <input type="hidden" name="server_dir" value="{html.escape(str(server_dir))}" />
-      <input type="hidden" name="server_name" value="{html.escape(server_name)}" />
-      <label class="field jump-field">
-        <span>Jump To Sandbox Setting</span>
-        <select onchange="if (this.value) window.location.hash = this.value;">
-          <option value="">Choose a sandbox setting</option>
-          {''.join(sandbox_jump_options)}
-        </select>
-      </label>
-      {''.join(sandbox_form) if sandbox_form else '<p class="muted-copy">No SandboxVars file found yet. Load a server with an existing file or save one first.</p>'}
-      {('<button type="submit">Save SandboxVars</button>' if sandbox_form else '')}
-    </form>
-    """
+    if sandbox_document.parse_error:
+        sandbox_body = f"""
+        <form method="post" action="/save-sandbox-raw">
+          <input type="hidden" name="server_dir" value="{html.escape(str(server_dir))}" />
+          <input type="hidden" name="server_name" value="{html.escape(server_name)}" />
+          <div class="status warning">SandboxVars parser fallback: {html.escape(sandbox_document.parse_error)}</div>
+          <label class="field">
+            <span>Raw SandboxVars</span>
+            <textarea name="sandbox_raw">{html.escape(sandbox_document.raw_text)}</textarea>
+          </label>
+          <button type="submit">Save Raw SandboxVars</button>
+        </form>
+        """
+    else:
+        sandbox_body = f"""
+        <form method="post" action="/save-sandbox">
+          <input type="hidden" name="server_dir" value="{html.escape(str(server_dir))}" />
+          <input type="hidden" name="server_name" value="{html.escape(server_name)}" />
+          <label class="field jump-field">
+            <span>Jump To Sandbox Setting</span>
+            <select onchange="if (this.value) window.location.hash = this.value;">
+              <option value="">Choose a sandbox setting</option>
+              {''.join(sandbox_jump_options)}
+            </select>
+          </label>
+          {''.join(sandbox_form) if sandbox_form else '<p class="muted-copy">No SandboxVars file found yet. Load a server with an existing file or save one first.</p>'}
+          {('<button type="submit">Save SandboxVars</button>' if sandbox_form else '')}
+        </form>
+        """
 
     advanced_body = f"""
     <form method="post" action="/save-advanced">

@@ -179,6 +179,20 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.redirect_home()
             return
 
+        if parsed.path == "/save-sandbox-raw":
+            server_dir = normalize_server_dir(form.get("server_dir", [""])[0] or str(DEFAULT_SERVER_DIR))
+            server_name = form.get("server_name", ["servertest"])[0].strip() or "servertest"
+            sandbox_file = advanced_path(server_dir, server_name, "{server}_SandboxVars.lua")
+            sandbox_file.parent.mkdir(parents=True, exist_ok=True)
+            sandbox_file.write_text(form.get("sandbox_raw", [""])[0], encoding="utf-8")
+            STATE.server_dir = server_dir
+            STATE.server_name = server_name
+            save_state()
+            STATE.status_message = f"Saved raw {sandbox_file.name}"
+            STATE.status_level = "success"
+            self.redirect_home()
+            return
+
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
     def parse_form_data(self) -> dict[str, list[str]]:
