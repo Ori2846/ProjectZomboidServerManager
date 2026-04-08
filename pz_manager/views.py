@@ -44,13 +44,17 @@ def build_page_data() -> dict[str, object]:
     mod_values = [item.strip().lstrip("\\") for item in (mods_field.value if mods_field else "").split(";") if item.strip()]
     workshop_values = [item.strip() for item in (workshop_field.value if workshop_field else "").split(";") if item.strip()]
     display_names = get_mod_display_names()
-    mod_row_count = max(len(mod_values), len(workshop_values), len(display_names), 1)
+    mod_row_count = max(len(workshop_values), len(display_names), 1)
+    grouped_mods = ["" for _ in range(mod_row_count)]
+    for index, mod_value in enumerate(mod_values):
+        target_index = index if index < mod_row_count else mod_row_count - 1
+        grouped_mods[target_index] = f"{grouped_mods[target_index]}, {mod_value}".strip(", ")
     mod_rows = []
     for index in range(mod_row_count):
         workshop_id = workshop_values[index] if index < len(workshop_values) else ""
         mod_rows.append(
             {
-                "mod": mod_values[index] if index < len(mod_values) else "",
+                "mod": grouped_mods[index] if index < len(grouped_mods) else "",
                 "displayName": display_names[index] if index < len(display_names) else "",
                 "workshopId": workshop_id,
                 "workshopUrl": (

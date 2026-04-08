@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import re
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
@@ -87,7 +88,15 @@ class RequestHandler(BaseHTTPRequestHandler):
                 for mod_value, display_name, workshop_value in zip(mods_values, display_names, workshop_values)
                 if mod_value or display_name or workshop_value
             ]
-            filtered_mods = [mod_value for mod_value, _display_name, _workshop_value in filtered_rows if mod_value]
+            filtered_mods = []
+            for mod_value, _display_name, _workshop_value in filtered_rows:
+                if not mod_value:
+                    continue
+                filtered_mods.extend(
+                    item.strip()
+                    for item in re.split(r"[,\n;]+", mod_value)
+                    if item.strip()
+                )
             filtered_workshop = [workshop_value for _mod_value, _display_name, workshop_value in filtered_rows if workshop_value]
             filtered_names = [display_name for _mod_value, display_name, _workshop_value in filtered_rows]
             for field in ini_document.fields:

@@ -3,6 +3,9 @@ import { Field, InfoBlock, InfoLine, Panel, SettingCard } from './UiBits.jsx'
 export function MainPanels(props) {
   const {
     page,
+    liveLogs,
+    liveRunning,
+    liveServerPid,
     busyAction,
     panelState,
     togglePanel,
@@ -44,31 +47,35 @@ export function MainPanels(props) {
     <div className="panel-stack">
       <Panel title="Server Target" subtitle={`${page.serverDir} | ${page.serverName}`} panelKey="server-target" open={panelState['server-target']} onToggle={togglePanel}>
         <form className="form-grid" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/select-server', [['server_dir', targetForm.serverDir], ['server_name', targetForm.serverName]], 'load-server') }}>
+          <div className="button-row top-actions">
+            <button type="submit" disabled={busyAction === 'load-server'}>Load Server</button>
+          </div>
           <Field label="Server Folder"><input value={targetForm.serverDir} onChange={(event) => setTargetForm((current) => ({ ...current, serverDir: event.target.value }))} /></Field>
           <Field label="Server Name"><input value={targetForm.serverName} onChange={(event) => setTargetForm((current) => ({ ...current, serverName: event.target.value }))} /></Field>
-          <button type="submit" disabled={busyAction === 'load-server'}>Load Server</button>
         </form>
       </Panel>
 
-      <Panel title="Server Process" subtitle="Launch and control the dedicated server from the manager." badge={<span className={`pill ${page.running ? 'success' : 'warning'}`}>{page.running ? 'Running' : 'Stopped'}{page.running && page.serverPid ? ` | PID ${page.serverPid}` : ''}</span>} panelKey="server-process" open={panelState['server-process']} onToggle={togglePanel}>
+      <Panel title="Server Process" subtitle="Launch and control the dedicated server from the manager." badge={<span className={`pill ${liveRunning ? 'success' : 'warning'}`}>{liveRunning ? 'Running' : 'Stopped'}{liveRunning && liveServerPid ? ` | PID ${liveServerPid}` : ''}</span>} panelKey="server-process" open={panelState['server-process']} onToggle={togglePanel}>
         <form className="form-grid" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-launch', [['launch_command', launchForm.launchCommand], ['launch_workdir', launchForm.launchWorkdir]], 'save-launch') }}>
-          <Field label="Launch Command"><input value={launchForm.launchCommand} onChange={(event) => setLaunchForm((current) => ({ ...current, launchCommand: event.target.value }))} placeholder="StartServer64.bat -servername servertest" /></Field>
-          <Field label="Launch Working Directory"><input value={launchForm.launchWorkdir} onChange={(event) => setLaunchForm((current) => ({ ...current, launchWorkdir: event.target.value }))} /></Field>
-          <div className="button-row">
+          <div className="button-row top-actions">
             <button type="submit" disabled={busyAction === 'save-launch'}>Save Launch Settings</button>
             <button type="button" className="secondary" disabled={busyAction === 'start-server'} onClick={() => submitForm('/api/start-server', [], 'start-server')}>Start Server</button>
             <button type="button" className="secondary" disabled={busyAction === 'stop-server'} onClick={() => submitForm('/api/stop-server', [], 'stop-server')}>Stop Server</button>
           </div>
+          <Field label="Launch Command"><input value={launchForm.launchCommand} onChange={(event) => setLaunchForm((current) => ({ ...current, launchCommand: event.target.value }))} placeholder="StartServer64.bat -servername servertest" /></Field>
+          <Field label="Launch Working Directory"><input value={launchForm.launchWorkdir} onChange={(event) => setLaunchForm((current) => ({ ...current, launchWorkdir: event.target.value }))} /></Field>
         </form>
       </Panel>
 
       <Panel title="Live Console" subtitle="Send commands, clear the visible buffer, and watch output update in place." panelKey="live-console" open={panelState['live-console']} onToggle={togglePanel}>
         <form className="console-form" onSubmit={async (event) => { event.preventDefault(); const ok = await submitForm('/api/send-command', [['console_command', consoleCommand]], 'send-command'); if (ok) setConsoleCommand('') }}>
+          <div className="button-row top-actions">
+            <button type="submit" disabled={busyAction === 'send-command'}>Send Command</button>
+            <button type="button" className="secondary" disabled={busyAction === 'clear-console'} onClick={() => submitForm('/api/clear-console', [], 'clear-console')}>Clear Console</button>
+          </div>
           <Field label="Console Command"><input value={consoleCommand} onChange={(event) => setConsoleCommand(event.target.value)} placeholder="save, quit, help, players" /></Field>
-          <button type="submit" disabled={busyAction === 'send-command'}>Send Command</button>
-          <button type="button" className="secondary" disabled={busyAction === 'clear-console'} onClick={() => submitForm('/api/clear-console', [], 'clear-console')}>Clear Console</button>
         </form>
-        <pre className="log-console">{page.logs.join('\n')}</pre>
+        <pre className="log-console">{liveLogs.join('\n')}</pre>
       </Panel>
 
       <Panel title="Common Settings" subtitle={page.paths.ini} panelKey="common-settings" open={panelState['common-settings']} onToggle={togglePanel}>
@@ -82,6 +89,9 @@ export function MainPanels(props) {
         </div>
         {page.commonSettings.length ? (
           <form className="settings-grid" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-common', [['server_dir', page.serverDir], ['server_name', page.serverName], ...page.commonSettings.flatMap((field) => [[`ini__${field.key}`, commonValues[field.key] ?? ''], [`ini_type__${field.key}`, field.valueType]])], 'save-common') }}>
+            <div className="button-row top-actions settings-actions">
+              <button type="submit" disabled={busyAction === 'save-common'}>Save Server Settings</button>
+            </div>
             {page.commonSettings.map((field) => (
               <SettingCard key={field.id} id={field.id} label={field.key} help={field.comments}>
                 {field.valueType === 'bool' ? (
@@ -94,7 +104,6 @@ export function MainPanels(props) {
                 )}
               </SettingCard>
             ))}
-            <button type="submit" disabled={busyAction === 'save-common'}>Save Server Settings</button>
           </form>
         ) : <p className="empty-state">No `.ini` file found yet for this server.</p>}
       </Panel>
@@ -102,18 +111,22 @@ export function MainPanels(props) {
       <Panel title="Mods And Workshop Items" subtitle="Keep folder names, manager labels, and workshop IDs aligned." panelKey="mods-workshop" open={panelState['mods-workshop']} onToggle={togglePanel}>
         {page.mods.available ? (
           <form className="form-grid" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-mods', [['server_dir', page.serverDir], ['server_name', page.serverName], ['ini_pair_mods', modRows.map((row) => row.mod)], ['mod_display_name', modRows.map((row) => row.displayName)], ['ini_pair_workshop', modRows.map((row) => row.workshopId)]], 'save-mods') }}>
+            <div className="button-row top-actions">
+              <button type="button" className="secondary" onClick={() => setModRows((current) => [...current, { mod: '', displayName: '', workshopId: '' }])}>Add Mod + Workshop Row</button>
+              <button type="submit" disabled={busyAction === 'save-mods'}>Save Mods And Workshop Items</button>
+            </div>
             <div className="paired-help">
-              <InfoBlock title="Mods" body={page.mods.modsHelp} />
               <InfoBlock title="Display Name" body="Saved in this manager only. It does not get written into the server file." />
+              <InfoBlock title="Mod IDs" body={page.mods.modsHelp || 'Enter one or more Project Zomboid mod IDs for this workshop item.'} />
               <InfoBlock title="WorkshopItems" body={page.mods.workshopHelp} />
               <InfoBlock title="Workshop Link" body="Generated from the Workshop ID for quick opening." />
             </div>
-            <div className="table-head mods-grid"><span>Mod Folder</span><span>Manager Label</span><span>Workshop ID</span><span>Link</span><span>Actions</span></div>
+            <div className="table-head mods-grid"><span>Manager Label</span><span>Mod IDs</span><span>Workshop ID</span><span>Link</span><span>Actions</span></div>
             <div className="row-stack">
               {modRows.map((row, index) => (
-                <div key={`${index}-${row.mod}-${row.workshopId}`} className="table-row mods-grid">
-                  <input value={row.mod} placeholder="Mod folder name" onChange={(event) => setModRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, mod: event.target.value } : item))} />
+                <div key={index} className="table-row mods-grid">
                   <input value={row.displayName} placeholder="Display name in manager only" onChange={(event) => setModRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, displayName: event.target.value } : item))} />
+                  <input value={row.mod} placeholder="ModA, ModB" onChange={(event) => setModRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, mod: event.target.value } : item))} />
                   <input value={row.workshopId} placeholder="Workshop ID" onChange={(event) => setModRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, workshopId: event.target.value } : item))} />
                   <div className="link-cell">{row.workshopId ? <a href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${row.workshopId}`} target="_blank" rel="noreferrer">Open Workshop Page</a> : <span className="muted-text">No ID</span>}</div>
                   <div className="row-actions">
@@ -124,22 +137,20 @@ export function MainPanels(props) {
                 </div>
               ))}
             </div>
-            <div className="button-row">
-              <button type="button" className="secondary" onClick={() => setModRows((current) => [...current, { mod: '', displayName: '', workshopId: '' }])}>Add Mod + Workshop Row</button>
-              <button type="submit" disabled={busyAction === 'save-mods'}>Save Mods And Workshop Items</button>
-            </div>
           </form>
         ) : <p className="empty-state">No Mods or WorkshopItems setting found in this `.ini` file.</p>}
       </Panel>
 
-      <PlayerPanels page={page} busyAction={busyAction} panelState={panelState} togglePanel={togglePanel} submitForm={submitForm} selectedUser={selectedUser} setSelectedUser={setSelectedUser} selectedAccessLevel={selectedAccessLevel} setSelectedAccessLevel={setSelectedAccessLevel} selectedEvent={selectedEvent} setSelectedEvent={setSelectedEvent} eventCount={eventCount} setEventCount={setEventCount} eventRadius={eventRadius} setEventRadius={setEventRadius} currentUser={currentUser} currentEvent={currentEvent} />
+      <PlayerPanels page={page} liveRunning={liveRunning} busyAction={busyAction} panelState={panelState} togglePanel={togglePanel} submitForm={submitForm} selectedUser={selectedUser} setSelectedUser={setSelectedUser} selectedAccessLevel={selectedAccessLevel} setSelectedAccessLevel={setSelectedAccessLevel} selectedEvent={selectedEvent} setSelectedEvent={setSelectedEvent} eventCount={eventCount} setEventCount={setEventCount} eventRadius={eventRadius} setEventRadius={setEventRadius} currentUser={currentUser} currentEvent={currentEvent} />
 
       <Panel title="SandboxVars" subtitle={page.paths.sandbox} panelKey="sandboxvars" open={panelState.sandboxvars} onToggle={togglePanel}>
         {page.sandbox.parseError ? (
           <form className="form-grid" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-sandbox-raw', [['server_dir', page.serverDir], ['server_name', page.serverName], ['sandbox_raw', sandboxRaw]], 'save-sandbox-raw') }}>
+            <div className="button-row top-actions">
+              <button type="submit" disabled={busyAction === 'save-sandbox-raw'}>Save Raw SandboxVars</button>
+            </div>
             <div className="status-banner warning">SandboxVars parser fallback: {page.sandbox.parseError}</div>
             <Field label="Raw SandboxVars"><textarea value={sandboxRaw} onChange={(event) => setSandboxRaw(event.target.value)} /></Field>
-            <button type="submit" disabled={busyAction === 'save-sandbox-raw'}>Save Raw SandboxVars</button>
           </form>
         ) : page.sandbox.fields.length ? (
           <>
@@ -152,6 +163,9 @@ export function MainPanels(props) {
               </Field>
             </div>
             <form className="sandbox-stack" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-sandbox', [['server_dir', page.serverDir], ['server_name', page.serverName], ...page.sandbox.fields.flatMap((field) => field.valueType === 'section' ? [] : [[`sandbox__${field.path}`, sandboxValues[field.path] ?? ''], [`sandbox_type__${field.path}`, field.valueType]])], 'save-sandbox') }}>
+              <div className="button-row top-actions">
+                <button type="submit" disabled={busyAction === 'save-sandbox'}>Save SandboxVars</button>
+              </div>
               {page.sandbox.fields.map((field) => field.valueType === 'section' ? (
                 <div key={field.id} id={field.id} className="sandbox-section" style={{ marginLeft: `${field.depth * 20}px` }}>
                   <h3>{field.label}</h3>
@@ -169,7 +183,6 @@ export function MainPanels(props) {
                   )}
                 </SettingCard>
               ))}
-              <button type="submit" disabled={busyAction === 'save-sandbox'}>Save SandboxVars</button>
             </form>
           </>
         ) : <p className="empty-state">No SandboxVars file found yet. Load a server with an existing file or save one first.</p>}
@@ -177,29 +190,33 @@ export function MainPanels(props) {
 
       <Panel title="Advanced Files" subtitle="Raw editors for the remaining Lua-based files." panelKey="advanced-files" open={panelState['advanced-files']} onToggle={togglePanel}>
         <form className="advanced-stack" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-advanced', [['server_dir', page.serverDir], ['server_name', page.serverName], ...page.advancedFiles.map((file) => [`raw_${file.label}`, advancedValues[file.label] ?? ''])], 'save-advanced') }}>
+          <div className="button-row top-actions">
+            <button type="submit" disabled={busyAction === 'save-advanced'}>Save Advanced Files</button>
+          </div>
           {page.advancedFiles.map((file) => (
             <section key={file.label} className="editor-card">
               <div className="editor-head"><h3>{file.label}</h3><p>{file.path}</p></div>
               <textarea value={advancedValues[file.label] ?? ''} onChange={(event) => setAdvancedValues((current) => ({ ...current, [file.label]: event.target.value }))} />
             </section>
           ))}
-          <button type="submit" disabled={busyAction === 'save-advanced'}>Save Advanced Files</button>
         </form>
       </Panel>
 
       <Panel title="Maintenance" subtitle="Danger zone actions for save data." panelKey="maintenance" open={panelState.maintenance} onToggle={togglePanel}>
         <form className="danger-form" onSubmit={async (event) => { event.preventDefault(); const ok = await submitForm('/api/reset-map', [['reset_confirmation', resetConfirmation]], 'reset-map'); if (ok) setResetConfirmation('') }}>
+          <div className="button-row top-actions">
+            <button type="submit" className="danger" disabled={busyAction === 'reset-map'}>Reset Map</button>
+          </div>
           <p className="field-help">This deletes everything inside <strong>{page.paths.saves}</strong>.</p>
           <p className="field-help">Type <strong>RESET</strong> exactly, then click the button.</p>
           <Field label="Confirmation"><input value={resetConfirmation} onChange={(event) => setResetConfirmation(event.target.value)} placeholder="RESET" /></Field>
-          <button type="submit" className="danger" disabled={busyAction === 'reset-map'}>Reset Map</button>
         </form>
       </Panel>
     </div>
   )
 }
 
-function PlayerPanels({ page, busyAction, panelState, togglePanel, submitForm, selectedUser, setSelectedUser, selectedAccessLevel, setSelectedAccessLevel, selectedEvent, setSelectedEvent, eventCount, setEventCount, eventRadius, setEventRadius, currentUser, currentEvent }) {
+function PlayerPanels({ page, liveRunning, busyAction, panelState, togglePanel, submitForm, selectedUser, setSelectedUser, selectedAccessLevel, setSelectedAccessLevel, selectedEvent, setSelectedEvent, eventCount, setEventCount, eventRadius, setEventRadius, currentUser, currentEvent }) {
   return (
     <Panel title="Players And Permissions" subtitle={page.users.available ? page.users.dbPath : 'No Project Zomboid server database found for this server name yet.'} panelKey="players-admin" open={panelState['players-admin']} onToggle={togglePanel}>
       {page.users.available ? (
@@ -216,9 +233,12 @@ function PlayerPanels({ page, busyAction, panelState, togglePanel, submitForm, s
             </div>
           </section>
           <section className="players-card">
-            <div className="players-card-head"><h3>Access Level</h3><p>{page.running ? 'When the server is live, role updates are sent through the console.' : 'When the server is offline, role updates are written directly into the DB.'}</p></div>
+            <div className="players-card-head"><h3>Access Level</h3><p>{liveRunning ? 'When the server is live, role updates are sent through the console.' : 'When the server is offline, role updates are written directly into the DB.'}</p></div>
             {currentUser ? (
               <form className="form-grid" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/set-user-access', [['username', currentUser.username], ['access_level', selectedAccessLevel]], 'set-user-access') }}>
+                <div className="button-row top-actions">
+                  <button type="submit" disabled={busyAction === 'set-user-access'}>Apply Access Level</button>
+                </div>
                 <div className="player-meta">
                   <InfoLine label="Username" value={currentUser.username} />
                   <InfoLine label="Display Name" value={currentUser.displayName || 'Not set'} />
@@ -231,13 +251,15 @@ function PlayerPanels({ page, busyAction, panelState, togglePanel, submitForm, s
                   </select>
                 </Field>
                 <p className="field-help">{page.users.roles.find((role) => role.name === selectedAccessLevel)?.description}</p>
-                <button type="submit" disabled={busyAction === 'set-user-access'}>Apply Access Level</button>
               </form>
             ) : <p className="empty-state">No users found in the whitelist database yet.</p>}
           </section>
           <section className="players-card">
             <div className="players-card-head"><h3>Player Events</h3><p>Lightning, thunder, and horde spawns can target a selected user. Helicopter and gunshot are global Project Zomboid events.</p></div>
             <form className="form-grid" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/player-event', [['event_id', selectedEvent], ['username', selectedUser], ['count', eventCount], ['radius', eventRadius]], 'player-event') }}>
+              <div className="button-row top-actions">
+                <button type="submit" disabled={busyAction === 'player-event' || !liveRunning || (currentEvent?.targeted && !selectedUser)}>Run Event</button>
+              </div>
               <Field label="Event">
                 <select value={selectedEvent} onChange={(event) => setSelectedEvent(event.target.value)}>
                   {page.playerEvents.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
@@ -257,7 +279,6 @@ function PlayerPanels({ page, busyAction, panelState, togglePanel, submitForm, s
                   <Field label="Spawn Radius"><input value={eventRadius} onChange={(event) => setEventRadius(event.target.value)} /></Field>
                 </div>
               ) : null}
-              <button type="submit" disabled={busyAction === 'player-event' || !page.running || (currentEvent?.targeted && !selectedUser)}>Run Event</button>
             </form>
           </section>
         </div>

@@ -61,6 +61,9 @@ function App() {
   const [clientStatus, setClientStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [busyAction, setBusyAction] = useState('')
+  const [liveLogs, setLiveLogs] = useState([])
+  const [liveRunning, setLiveRunning] = useState(false)
+  const [liveServerPid, setLiveServerPid] = useState(null)
   const [consoleCommand, setConsoleCommand] = useState('')
   const [resetConfirmation, setResetConfirmation] = useState('')
   const [selectedUser, setSelectedUser] = useState('')
@@ -75,6 +78,7 @@ function App() {
   const [sandboxValues, setSandboxValues] = useState({})
   const [sandboxRaw, setSandboxRaw] = useState('')
   const [advancedValues, setAdvancedValues] = useState({})
+  const [navTarget, setNavTarget] = useState('')
   const [panelState, setPanelState] = useState(() => {
     const saved = loadPanelState()
     return PANEL_KEYS.reduce((acc, key, index) => {
@@ -86,6 +90,9 @@ function App() {
   const applyPageData = (nextPage) => {
     startTransition(() => {
       setPage(nextPage)
+      setLiveLogs(nextPage.logs || [])
+      setLiveRunning(Boolean(nextPage.running))
+      setLiveServerPid(nextPage.serverPid ?? null)
       setClientStatus(null)
     })
   }
@@ -124,7 +131,9 @@ function App() {
     const response = await fetch('/logs', { cache: 'no-store' })
     if (!response.ok) return
     const payload = await response.json()
-    setPage((current) => (current ? { ...current, logs: payload.lines, running: payload.running, serverPid: payload.pid } : current))
+    setLiveLogs(payload.lines || [])
+    setLiveRunning(Boolean(payload.running))
+    setLiveServerPid(payload.pid ?? null)
   })
 
   useEffect(() => {
@@ -140,6 +149,19 @@ function App() {
       savePanelState(next)
       return next
     })
+  }
+
+  const jumpToPanel = (key) => {
+    if (!key) return
+    setNavTarget(key)
+    setPanelState((current) => {
+      const next = current[key] ? current : { ...current, [key]: true }
+      savePanelState(next)
+      return next
+    })
+    window.setTimeout(() => {
+      document.getElementById(`panel-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 60)
   }
 
   const submitForm = async (path, entries, actionLabel) => {
@@ -166,66 +188,125 @@ function App() {
 
   return (
     <main className="shell">
-      <section className="hero-banner">
-        <div className="hero-copy">
-          <p className="eyebrow">Project Zomboid Control Room</p>
-          <h1>{page.serverName}</h1>
-          <p className="subhead">Manage launch settings, live console access, server config, permissions, and sandbox data from one interface.</p>
+      <header className="topbar">
+        <div className="brand-block">
+          <p className="brand-kicker">Project Zomboid</p>
+          <div>
+            <h1>Server Admin Panel</h1>
+            <p>{page.serverName}</p>
+          </div>
         </div>
-        <div className="hero-grid">
-          <div className="stat-card muted"><span>Server Path</span><strong>{page.serverDir}</strong></div>
-          <div className="stat-card accent"><span>Network Address</span><strong>{page.accessUrl}</strong></div>
-          <div className={`stat-card ${page.running ? 'success' : 'warning'}`}><span>Process</span><strong>{page.running ? `Online${page.serverPid ? ` | PID ${page.serverPid}` : ''}` : 'Offline'}</strong></div>
+        <div className="topbar-meta">
+          <div className="topbar-stat">
+            <span>Network</span>
+            <strong>{page.accessUrl}</strong>
+          </div>
+          <div className={`topbar-status ${liveRunning ? 'success' : 'warning'}`}>
+            <span>{liveRunning ? 'Running' : 'Stopped'}</span>
+            <strong>{liveRunning && liveServerPid ? `PID ${liveServerPid}` : 'No process'}</strong>
+          </div>
         </div>
-      </section>
+      </header>
 
-      {(clientStatus || page.status)?.message ? (
-        <div className={`status-banner ${statusTone((clientStatus || page.status).level)}`}>{(clientStatus || page.status).message}</div>
-      ) : null}
+      <div className="app-frame">
+        <aside className="sidebar">
+          <div className="sidebar-block">
+            <p className="sidebar-label">Workspace</p>
+            <strong>{page.serverName}</strong>
+            <span>{page.serverDir}</span>
+          </div>
 
-      <nav className="quick-nav" aria-label="Sections">
-        {PANEL_KEYS.map((key) => (
-          <button key={key} type="button" className={`nav-chip ${panelState[key] ? 'active' : ''}`} onClick={() => togglePanel(key)}>
-            {PANEL_LABELS[key]}
-          </button>
-        ))}
-      </nav>
+          <div className="sidebar-nav" aria-label="Sections">
+            <label className="sidebar-select-wrap">
+              <span className="sidebar-label">Jump To</span>
+              <select value={navTarget} onChange={(event) => jumpToPanel(event.target.value)}>
+                <option value="">Choose a section</option>
+                {PANEL_KEYS.map((key) => (
+                  <option key={key} value={key}>
+                    {PANEL_LABELS[key]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
 
-      <MainPanels
-        page={page}
-        busyAction={busyAction}
-        panelState={panelState}
-        togglePanel={togglePanel}
-        submitForm={submitForm}
-        consoleCommand={consoleCommand}
-        setConsoleCommand={setConsoleCommand}
-        resetConfirmation={resetConfirmation}
-        setResetConfirmation={setResetConfirmation}
-        selectedUser={selectedUser}
-        setSelectedUser={setSelectedUser}
-        selectedAccessLevel={selectedAccessLevel}
-        setSelectedAccessLevel={setSelectedAccessLevel}
-        selectedEvent={selectedEvent}
-        setSelectedEvent={setSelectedEvent}
-        eventCount={eventCount}
-        setEventCount={setEventCount}
-        eventRadius={eventRadius}
-        setEventRadius={setEventRadius}
-        targetForm={targetForm}
-        setTargetForm={setTargetForm}
-        launchForm={launchForm}
-        setLaunchForm={setLaunchForm}
-        commonValues={commonValues}
-        setCommonValues={setCommonValues}
-        modRows={modRows}
-        setModRows={setModRows}
-        sandboxValues={sandboxValues}
-        setSandboxValues={setSandboxValues}
-        sandboxRaw={sandboxRaw}
-        setSandboxRaw={setSandboxRaw}
-        advancedValues={advancedValues}
-        setAdvancedValues={setAdvancedValues}
-      />
+          <div className="sidebar-block compact">
+            <p className="sidebar-label">Overview</p>
+            <div className="sidebar-metric">
+              <span>Console Lines</span>
+              <strong>{liveLogs.length}</strong>
+            </div>
+            <div className="sidebar-metric">
+              <span>Users</span>
+              <strong>{page.users.users.length}</strong>
+            </div>
+            <div className="sidebar-metric">
+              <span>Mods Rows</span>
+              <strong>{page.mods.rows.length}</strong>
+            </div>
+          </div>
+        </aside>
+
+        <section className="workspace">
+          <section className="hero-banner">
+            <div className="hero-copy">
+              <p className="eyebrow">Operations Console</p>
+              <h2>{page.serverName}</h2>
+              <p className="subhead">
+                Centralized controls for process management, configuration, user permissions, console commands, and world events.
+              </p>
+            </div>
+            <div className="hero-grid">
+              <div className="stat-card muted"><span>Server Path</span><strong>{page.serverDir}</strong></div>
+              <div className="stat-card accent"><span>Network Address</span><strong>{page.accessUrl}</strong></div>
+              <div className={`stat-card ${liveRunning ? 'success' : 'warning'}`}><span>Process</span><strong>{liveRunning ? `Online${liveServerPid ? ` | PID ${liveServerPid}` : ''}` : 'Offline'}</strong></div>
+            </div>
+          </section>
+
+          {(clientStatus || page.status)?.message ? (
+            <div className={`status-banner ${statusTone((clientStatus || page.status).level)}`}>{(clientStatus || page.status).message}</div>
+          ) : null}
+
+          <MainPanels
+            page={page}
+            liveLogs={liveLogs}
+            liveRunning={liveRunning}
+            liveServerPid={liveServerPid}
+            busyAction={busyAction}
+            panelState={panelState}
+            togglePanel={togglePanel}
+            submitForm={submitForm}
+            consoleCommand={consoleCommand}
+            setConsoleCommand={setConsoleCommand}
+            resetConfirmation={resetConfirmation}
+            setResetConfirmation={setResetConfirmation}
+            selectedUser={selectedUser}
+            setSelectedUser={setSelectedUser}
+            selectedAccessLevel={selectedAccessLevel}
+            setSelectedAccessLevel={setSelectedAccessLevel}
+            selectedEvent={selectedEvent}
+            setSelectedEvent={setSelectedEvent}
+            eventCount={eventCount}
+            setEventCount={setEventCount}
+            eventRadius={eventRadius}
+            setEventRadius={setEventRadius}
+            targetForm={targetForm}
+            setTargetForm={setTargetForm}
+            launchForm={launchForm}
+            setLaunchForm={setLaunchForm}
+            commonValues={commonValues}
+            setCommonValues={setCommonValues}
+            modRows={modRows}
+            setModRows={setModRows}
+            sandboxValues={sandboxValues}
+            setSandboxValues={setSandboxValues}
+            sandboxRaw={sandboxRaw}
+            setSandboxRaw={setSandboxRaw}
+            advancedValues={advancedValues}
+            setAdvancedValues={setAdvancedValues}
+          />
+        </section>
+      </div>
     </main>
   )
 }

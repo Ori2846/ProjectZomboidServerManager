@@ -1,6 +1,6 @@
 export function Panel({ title, subtitle, badge, panelKey, open, onToggle, children }) {
   return (
-    <section className={`panel ${open ? 'open' : ''}`}>
+    <section id={`panel-${panelKey}`} className={`panel ${open ? 'open' : ''}`}>
       <button type="button" className="panel-toggle" onClick={() => onToggle(panelKey)}>
         <div className="panel-copy">
           <h2>{title}</h2>
