@@ -75,6 +75,10 @@ def send_server_command(command: str) -> tuple[bool, str]:
     return True, f"Sent command: {trimmed}"
 
 
+def command_channel_available() -> bool:
+    return bool(is_server_running() and STATE.server_process is not None and STATE.server_process.stdin is not None)
+
+
 def stop_server() -> tuple[bool, str]:
     if not is_server_running():
         return False, "Server is not running."

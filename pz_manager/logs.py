@@ -30,3 +30,8 @@ def current_logs() -> list[str]:
     with LOG_LOCK:
         return list(LOG_LINES)
 
+
+def clear_log_history() -> None:
+    with LOG_LOCK:
+        LOG_LINES.clear()
+        LOG_FILE.write_text("", encoding="utf-8")
