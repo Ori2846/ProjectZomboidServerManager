@@ -7,6 +7,7 @@ DEFAULT_SAVES_DIR = DEFAULT_ZOMBOID_DIR / "Saves"
 DEFAULT_DB_DIR = DEFAULT_ZOMBOID_DIR / "db"
 DEFAULT_LAUNCH_DIR = Path(r"C:\pzserver")
 DEFAULT_LAUNCH_COMMAND = str(DEFAULT_LAUNCH_DIR / "StartServer64.bat")
+STEAM_APP_ID = "380870"
 STATE_FILE = Path(".pz_manager_state.json")
 LOG_FILE = Path(".pz_manager_server.log")
 HOST = "0.0.0.0"

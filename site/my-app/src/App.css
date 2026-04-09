@@ -4,6 +4,31 @@
   padding: 18px 0 40px;
 }
 
+.version-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+  padding: 12px 18px;
+  border: 1px solid rgba(255, 124, 77, 0.28);
+  border-radius: 18px;
+  background: linear-gradient(90deg, rgba(56, 24, 18, 0.96), rgba(17, 23, 33, 0.96));
+  box-shadow: var(--shadow-lg);
+}
+
+.version-strip span {
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.72rem;
+}
+
+.version-strip strong {
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
 .loading-shell {
   min-height: 100vh;
   display: grid;
@@ -52,7 +77,7 @@
 
 .topbar-meta {
   display: grid;
-  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
   gap: 12px;
 }
 
@@ -751,6 +776,11 @@ button.slim {
   .shell {
     width: min(100% - 18px, 1380px);
     padding-top: 12px;
+  }
+
+  .version-strip {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .topbar,

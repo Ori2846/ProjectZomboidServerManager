@@ -8,7 +8,7 @@ from .config import ADVANCED_FILES, DEFAULT_SAVES_DIR
 from .files import advanced_path, ini_path, load_advanced_contents, parse_ini_file
 from .logs import current_logs
 from .network import get_access_url
-from .processes import is_server_running
+from .processes import get_server_version_details, is_server_running
 from .sandbox_vars import flatten_sandbox_fields, load_sandbox_document_safe
 from .state import STATE, get_mod_display_names
 from .users import load_user_directory
@@ -31,6 +31,7 @@ def build_page_data() -> dict[str, object]:
     advanced_contents = load_advanced_contents(server_dir, server_name)
     sandbox_path = advanced_path(server_dir, server_name, "{server}_SandboxVars.lua")
     sandbox_document = load_sandbox_document_safe(sandbox_path)
+    version_details = get_server_version_details()
     sandbox_fields = (
         flatten_sandbox_fields(sandbox_document.data, sandbox_document.comments)
         if sandbox_document.data and not sandbox_document.parse_error
@@ -113,6 +114,7 @@ def build_page_data() -> dict[str, object]:
         "serverName": server_name,
         "running": running,
         "serverPid": STATE.server_pid,
+        "serverVersion": version_details,
         "status": {
             "message": STATE.status_message,
             "level": STATE.status_level,

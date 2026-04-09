@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import re
 import subprocess
 import threading
+from pathlib import Path
 
+from .config import STEAM_APP_ID
 from .logs import append_log_line
 from .state import STATE, save_state
 
@@ -127,3 +130,110 @@ def stream_process_output(process: subprocess.Popen[str]) -> None:
             STATE.server_process = None
             STATE.server_pid = None
             save_state()
+
+
+def _appmanifest_path() -> Path:
+    return STATE.launch_workdir / "steamapps" / f"appmanifest_{STEAM_APP_ID}.acf"
+
+
+def _read_acf_value(text: str, key: str) -> str:
+    match = re.search(rf'"{re.escape(key)}"\s+"([^"]*)"', text)
+    return match.group(1) if match else ""
+
+
+def _steamcmd_candidates(manifest_text: str) -> list[Path]:
+    launcher_path = _read_acf_value(manifest_text, "LauncherPath")
+    candidates = []
+    if launcher_path:
+        candidates.append(Path(launcher_path))
+    candidates.extend(
+        [
+            STATE.launch_workdir / "steamcmd.exe",
+            STATE.launch_workdir.parent / "steamcmd.exe",
+            Path.home() / "Desktop" / "steamcmd.exe",
+        ]
+    )
+    deduped = []
+    seen = set()
+    for candidate in candidates:
+        normalized = str(candidate)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(candidate)
+    return deduped
+
+
+def get_server_version_details() -> dict[str, str]:
+    manifest_path = _appmanifest_path()
+    if not manifest_path.exists():
+        return {
+            "buildId": "",
+            "branch": "",
+            "display": "Unavailable",
+            "manifestPath": str(manifest_path),
+            "steamcmdPath": "",
+        }
+
+    manifest_text = manifest_path.read_text(encoding="utf-8", errors="ignore")
+    build_id = _read_acf_value(manifest_text, "buildid")
+    branch = _read_acf_value(manifest_text, "BetaKey")
+    steamcmd_path = next((str(path) for path in _steamcmd_candidates(manifest_text) if path.exists()), "")
+
+    if build_id and branch:
+        display = f"Build {build_id} | {branch}"
+    elif build_id:
+        display = f"Build {build_id}"
+    elif branch:
+        display = f"Branch {branch}"
+    else:
+        display = "Unavailable"
+
+    return {
+        "buildId": build_id,
+        "branch": branch,
+        "display": display,
+        "manifestPath": str(manifest_path),
+        "steamcmdPath": steamcmd_path,
+    }
+
+
+def launch_server_update() -> tuple[bool, str]:
+    if is_server_running():
+        return False, "Stop the server before running a SteamCMD update."
+
+    install_dir = STATE.launch_workdir
+    if not install_dir.exists():
+        return False, "Launch working directory does not exist."
+
+    version_details = get_server_version_details()
+    steamcmd_path_value = version_details["steamcmdPath"]
+    if not steamcmd_path_value:
+        return False, f"Could not find steamcmd.exe. Checked {version_details['manifestPath']} and common SteamCMD paths."
+
+    steamcmd_path = Path(steamcmd_path_value)
+    command = [
+        str(steamcmd_path),
+        "+login",
+        "anonymous",
+        "+force_install_dir",
+        str(install_dir),
+        "+app_update",
+        STEAM_APP_ID,
+    ]
+    if version_details["branch"]:
+        command.extend(["-beta", version_details["branch"]])
+    command.append("+quit")
+
+    try:
+        subprocess.Popen(
+            command,
+            cwd=str(steamcmd_path.parent),
+            creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+        )
+    except OSError as error:
+        return False, f"Failed to open SteamCMD: {error}"
+
+    append_log_line(f"=== SteamCMD update started for app {STEAM_APP_ID} in {install_dir} ===")
+    branch_text = f" on branch {version_details['branch']}" if version_details["branch"] else ""
+    return True, f"Opened SteamCMD update for Project Zomboid{branch_text}."

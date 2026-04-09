@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urlparse
 from .config import ADVANCED_FILES, DEFAULT_SAVES_DIR, DEFAULT_SERVER_DIR
 from .files import advanced_path, ini_path, normalize_server_dir, parse_ini_file, reset_saves_directory, write_ini_file
 from .logs import clear_log_history, current_logs
-from .processes import command_channel_available, is_server_running, send_server_command, start_server, stop_server
+from .processes import command_channel_available, is_server_running, launch_server_update, send_server_command, start_server, stop_server
 from .sandbox_vars import coerce_sandbox_value, load_sandbox_vars, save_sandbox_vars, update_sandbox_value
 from .state import STATE, save_state, set_mod_display_names
 from .users import set_user_access_level
@@ -124,6 +124,13 @@ class RequestHandler(BaseHTTPRequestHandler):
 
         if action_path == "/start-server":
             ok, message = start_server()
+            STATE.status_message = message
+            STATE.status_level = "success" if ok else "warning"
+            self.respond_action(wants_json)
+            return
+
+        if action_path == "/update-server":
+            ok, message = launch_server_update()
             STATE.status_message = message
             STATE.status_level = "success" if ok else "warning"
             self.respond_action(wants_json)

@@ -188,6 +188,11 @@ function App() {
 
   return (
     <main className="shell">
+      <section className="version-strip">
+        <span>Server Version</span>
+        <strong>{page.serverVersion?.display || 'Unavailable'}</strong>
+      </section>
+
       <header className="topbar">
         <div className="brand-block">
           <p className="brand-kicker">Project Zomboid</p>
@@ -197,6 +202,10 @@ function App() {
           </div>
         </div>
         <div className="topbar-meta">
+          <div className="topbar-stat">
+            <span>Installed Build</span>
+            <strong>{page.serverVersion?.display || 'Unavailable'}</strong>
+          </div>
           <div className="topbar-stat">
             <span>Network</span>
             <strong>{page.accessUrl}</strong>
@@ -257,6 +266,7 @@ function App() {
               </p>
             </div>
             <div className="hero-grid">
+              <div className="stat-card muted"><span>Installed Version</span><strong>{page.serverVersion?.display || 'Unavailable'}</strong></div>
               <div className="stat-card muted"><span>Server Path</span><strong>{page.serverDir}</strong></div>
               <div className="stat-card accent"><span>Network Address</span><strong>{page.accessUrl}</strong></div>
               <div className={`stat-card ${liveRunning ? 'success' : 'warning'}`}><span>Process</span><strong>{liveRunning ? `Online${liveServerPid ? ` | PID ${liveServerPid}` : ''}` : 'Offline'}</strong></div>

@@ -59,9 +59,11 @@ export function MainPanels(props) {
         <form className="form-grid" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-launch', [['launch_command', launchForm.launchCommand], ['launch_workdir', launchForm.launchWorkdir]], 'save-launch') }}>
           <div className="button-row top-actions">
             <button type="submit" disabled={busyAction === 'save-launch'}>Save Launch Settings</button>
+            <button type="button" className="secondary" disabled={busyAction === 'update-server' || liveRunning} onClick={() => submitForm('/api/update-server', [], 'update-server')}>Update Server</button>
             <button type="button" className="secondary" disabled={busyAction === 'start-server'} onClick={() => submitForm('/api/start-server', [], 'start-server')}>Start Server</button>
             <button type="button" className="secondary" disabled={busyAction === 'stop-server'} onClick={() => submitForm('/api/stop-server', [], 'stop-server')}>Stop Server</button>
           </div>
+          <p className="field-help">SteamCMD path: {page.serverVersion?.steamcmdPath || 'Not found from the current install metadata.'}</p>
           <Field label="Launch Command"><input value={launchForm.launchCommand} onChange={(event) => setLaunchForm((current) => ({ ...current, launchCommand: event.target.value }))} placeholder="StartServer64.bat -servername servertest" /></Field>
           <Field label="Launch Working Directory"><input value={launchForm.launchWorkdir} onChange={(event) => setLaunchForm((current) => ({ ...current, launchWorkdir: event.target.value }))} /></Field>
         </form>
