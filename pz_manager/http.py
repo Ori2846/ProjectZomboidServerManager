@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import mimetypes
+import re
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
@@ -8,32 +10,37 @@ from urllib.parse import parse_qs, urlparse
 
 from .config import ADVANCED_FILES, DEFAULT_SAVES_DIR, DEFAULT_SERVER_DIR
 from .files import advanced_path, ini_path, normalize_server_dir, parse_ini_file, reset_saves_directory, write_ini_file
-from .logs import current_logs
-from .processes import is_server_running, send_server_command, start_server, stop_server
+from .logs import clear_log_history, current_logs
+from .processes import command_channel_available, is_server_running, launch_server_update, send_server_command, start_server, stop_server
 from .sandbox_vars import coerce_sandbox_value, load_sandbox_vars, save_sandbox_vars, update_sandbox_value
 from .state import STATE, save_state, set_mod_display_names
-from .views import render_page
+from .users import set_user_access_level
+from .views import build_page_data, render_app_shell
 
 
 class RequestHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/":
-            self.respond_html(render_page())
+            self.respond_html(render_app_shell())
+            return
+        if parsed.path == "/api/state":
+            self.respond_json(build_page_data())
             return
         if parsed.path == "/logs":
             self.respond_json({"lines": current_logs(), "running": is_server_running(), "pid": STATE.server_pid})
             return
-        if parsed.path == "/static/style.css":
-            self.respond_file(Path("static/style.css"), "text/css; charset=utf-8")
+        if self.serve_frontend_asset(parsed.path):
             return
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         form = self.parse_form_data()
+        wants_json = parsed.path.startswith("/api/")
+        action_path = parsed.path.removeprefix("/api")
 
-        if parsed.path == "/select-server":
+        if action_path == "/select-server":
             server_dir = normalize_server_dir(form.get("server_dir", [""])[0] or str(DEFAULT_SERVER_DIR))
             server_name = form.get("server_name", ["servertest"])[0].strip() or "servertest"
             STATE.server_dir = server_dir
@@ -45,10 +52,10 @@ class RequestHandler(BaseHTTPRequestHandler):
             else:
                 STATE.status_message = "Server file not found yet. Saving will create it."
                 STATE.status_level = "warning"
-            self.redirect_home()
+            self.respond_action(wants_json)
             return
 
-        if parsed.path == "/save-common":
+        if action_path == "/save-common":
             server_dir = normalize_server_dir(form.get("server_dir", [""])[0] or str(DEFAULT_SERVER_DIR))
             server_name = form.get("server_name", ["servertest"])[0].strip() or "servertest"
             ini_file = ini_path(server_dir, server_name)
@@ -63,10 +70,10 @@ class RequestHandler(BaseHTTPRequestHandler):
             save_state()
             STATE.status_message = f"Saved {ini_file.name}"
             STATE.status_level = "success"
-            self.redirect_home()
+            self.respond_action(wants_json)
             return
 
-        if parsed.path == "/save-mods":
+        if action_path == "/save-mods":
             server_dir = normalize_server_dir(form.get("server_dir", [""])[0] or str(DEFAULT_SERVER_DIR))
             server_name = form.get("server_name", ["servertest"])[0].strip() or "servertest"
             STATE.server_dir = server_dir
@@ -81,7 +88,15 @@ class RequestHandler(BaseHTTPRequestHandler):
                 for mod_value, display_name, workshop_value in zip(mods_values, display_names, workshop_values)
                 if mod_value or display_name or workshop_value
             ]
-            filtered_mods = [mod_value for mod_value, _display_name, _workshop_value in filtered_rows if mod_value]
+            filtered_mods = []
+            for mod_value, _display_name, _workshop_value in filtered_rows:
+                if not mod_value:
+                    continue
+                filtered_mods.extend(
+                    item.strip()
+                    for item in re.split(r"[,\n;]+", mod_value)
+                    if item.strip()
+                )
             filtered_workshop = [workshop_value for _mod_value, _display_name, workshop_value in filtered_rows if workshop_value]
             filtered_names = [display_name for _mod_value, display_name, _workshop_value in filtered_rows]
             for field in ini_document.fields:
@@ -94,54 +109,122 @@ class RequestHandler(BaseHTTPRequestHandler):
             save_state()
             STATE.status_message = "Saved Mods, WorkshopItems, and manager labels"
             STATE.status_level = "success"
-            self.redirect_home()
+            self.respond_action(wants_json)
             return
 
-        if parsed.path == "/save-launch":
+        if action_path == "/save-launch":
             STATE.launch_command = form.get("launch_command", [""])[0].strip()
             workdir_value = form.get("launch_workdir", [""])[0] or str(Path.cwd())
             STATE.launch_workdir = normalize_server_dir(workdir_value)
             save_state()
             STATE.status_message = "Saved launch settings"
             STATE.status_level = "success"
-            self.redirect_home()
+            self.respond_action(wants_json)
             return
 
-        if parsed.path == "/start-server":
+        if action_path == "/start-server":
             ok, message = start_server()
             STATE.status_message = message
             STATE.status_level = "success" if ok else "warning"
-            self.redirect_home()
+            self.respond_action(wants_json)
             return
 
-        if parsed.path == "/send-command":
+        if action_path == "/update-server":
+            ok, message = launch_server_update()
+            STATE.status_message = message
+            STATE.status_level = "success" if ok else "warning"
+            self.respond_action(wants_json)
+            return
+
+        if action_path == "/send-command":
             ok, message = send_server_command(form.get("console_command", [""])[0])
             STATE.status_message = message
             STATE.status_level = "success" if ok else "warning"
-            self.redirect_home()
+            self.respond_action(wants_json)
             return
 
-        if parsed.path == "/reset-map":
+        if action_path == "/clear-console":
+            clear_log_history()
+            STATE.status_message = "Cleared console history"
+            STATE.status_level = "success"
+            self.respond_action(wants_json)
+            return
+
+        if action_path == "/set-user-access":
+            username = form.get("username", [""])[0]
+            access_level = form.get("access_level", [""])[0]
+            if is_server_running():
+                if not command_channel_available():
+                    STATE.status_message = "The server is running, but its command channel is unavailable. Start it from this manager to change access levels live."
+                    STATE.status_level = "warning"
+                    self.respond_action(wants_json)
+                    return
+                console_level = "none" if access_level.strip().lower() == "user" else access_level.strip().lower()
+                ok, message = send_server_command(f'setaccesslevel "{username.strip()}" "{console_level}"')
+            else:
+                ok, message = set_user_access_level(STATE.server_name, username, access_level)
+            STATE.status_message = message
+            STATE.status_level = "success" if ok else "warning"
+            self.respond_action(wants_json)
+            return
+
+        if action_path == "/player-event":
+            event_id = form.get("event_id", [""])[0].strip().lower()
+            username = form.get("username", [""])[0].strip()
+            radius = form.get("radius", [""])[0].strip() or "4"
+            count = form.get("count", [""])[0].strip() or "12"
+            if not command_channel_available():
+                STATE.status_message = "Player events require a running server started from this manager."
+                STATE.status_level = "warning"
+                self.respond_action(wants_json)
+                return
+            if event_id == "lightning":
+                if not username:
+                    ok, message = False, "Choose a target user for lightning."
+                else:
+                    ok, message = send_server_command(f'lightning "{username}"')
+            elif event_id == "thunder":
+                if not username:
+                    ok, message = False, "Choose a target user for thunder."
+                else:
+                    ok, message = send_server_command(f'thunder "{username}"')
+            elif event_id == "createhorde":
+                if not username:
+                    ok, message = False, "Choose a target user for the horde spawn."
+                else:
+                    ok, message = send_server_command(f'createhorde {count} "{username}"')
+            elif event_id == "chopper":
+                ok, message = send_server_command("chopper")
+            elif event_id == "gunshot":
+                ok, message = send_server_command("gunshot")
+            else:
+                ok, message = False, f"Unknown player event: {event_id}"
+            STATE.status_message = message
+            STATE.status_level = "success" if ok else "warning"
+            self.respond_action(wants_json)
+            return
+
+        if action_path == "/reset-map":
             confirmation = form.get("reset_confirmation", [""])[0].strip()
             if confirmation != "RESET":
                 STATE.status_message = "Reset cancelled. Type RESET exactly to delete everything in the Saves folder."
                 STATE.status_level = "warning"
-                self.redirect_home()
+                self.respond_action(wants_json)
                 return
             ok, message = reset_saves_directory(DEFAULT_SAVES_DIR)
             STATE.status_message = message
             STATE.status_level = "success" if ok else "warning"
-            self.redirect_home()
+            self.respond_action(wants_json)
             return
 
-        if parsed.path == "/stop-server":
+        if action_path == "/stop-server":
             ok, message = stop_server()
             STATE.status_message = message
             STATE.status_level = "success" if ok else "warning"
-            self.redirect_home()
+            self.respond_action(wants_json)
             return
 
-        if parsed.path == "/save-advanced":
+        if action_path == "/save-advanced":
             server_dir = normalize_server_dir(form.get("server_dir", [""])[0] or str(DEFAULT_SERVER_DIR))
             server_name = form.get("server_name", ["servertest"])[0].strip() or "servertest"
             server_dir.mkdir(parents=True, exist_ok=True)
@@ -155,10 +238,10 @@ class RequestHandler(BaseHTTPRequestHandler):
             save_state()
             STATE.status_message = "Saved advanced server files"
             STATE.status_level = "success"
-            self.redirect_home()
+            self.respond_action(wants_json)
             return
 
-        if parsed.path == "/save-sandbox":
+        if action_path == "/save-sandbox":
             server_dir = normalize_server_dir(form.get("server_dir", [""])[0] or str(DEFAULT_SERVER_DIR))
             server_name = form.get("server_name", ["servertest"])[0].strip() or "servertest"
             sandbox_file = advanced_path(server_dir, server_name, "{server}_SandboxVars.lua")
@@ -176,10 +259,10 @@ class RequestHandler(BaseHTTPRequestHandler):
             save_state()
             STATE.status_message = f"Saved {sandbox_file.name}"
             STATE.status_level = "success"
-            self.redirect_home()
+            self.respond_action(wants_json)
             return
 
-        if parsed.path == "/save-sandbox-raw":
+        if action_path == "/save-sandbox-raw":
             server_dir = normalize_server_dir(form.get("server_dir", [""])[0] or str(DEFAULT_SERVER_DIR))
             server_name = form.get("server_name", ["servertest"])[0].strip() or "servertest"
             sandbox_file = advanced_path(server_dir, server_name, "{server}_SandboxVars.lua")
@@ -190,7 +273,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             save_state()
             STATE.status_message = f"Saved raw {sandbox_file.name}"
             STATE.status_level = "success"
-            self.redirect_home()
+            self.respond_action(wants_json)
             return
 
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
@@ -204,6 +287,12 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.SEE_OTHER)
         self.send_header("Location", "/")
         self.end_headers()
+
+    def respond_action(self, wants_json: bool) -> None:
+        if wants_json:
+            self.respond_json(build_page_data())
+            return
+        self.redirect_home()
 
     def respond_html(self, body: str) -> None:
         encoded = body.encode("utf-8")
@@ -223,6 +312,22 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(encoded)))
         self.end_headers()
         self.wfile.write(encoded)
+
+    def serve_frontend_asset(self, request_path: str) -> bool:
+        dist_dir = Path("site/my-app/dist")
+        if not dist_dir.exists():
+            return False
+        relative = request_path.lstrip("/")
+        if not relative:
+            return False
+        candidate = (dist_dir / relative).resolve()
+        if dist_dir.resolve() not in candidate.parents and candidate != dist_dir.resolve():
+            return False
+        if not candidate.exists() or not candidate.is_file():
+            return False
+        content_type, _encoding = mimetypes.guess_type(candidate.name)
+        self.respond_file(candidate, content_type or "application/octet-stream")
+        return True
 
     def respond_json(self, payload: dict[str, object]) -> None:
         encoded = json.dumps(payload).encode("utf-8")
