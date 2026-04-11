@@ -643,6 +643,60 @@
   margin-bottom: 12px;
 }
 
+.advanced-notepad {
+  display: grid;
+  gap: 14px;
+}
+
+.advanced-file-list {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.advanced-file-tab {
+  background: rgba(11, 16, 24, 0.72);
+}
+
+.advanced-file-tab.active {
+  border-color: rgba(255, 124, 77, 0.78);
+  background: linear-gradient(180deg, rgba(82, 45, 29, 0.94), rgba(43, 26, 21, 0.94));
+}
+
+.advanced-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.advanced-editor-head {
+  display: grid;
+  gap: 4px;
+}
+
+.advanced-editor-head strong,
+.advanced-editor-head span {
+  overflow-wrap: anywhere;
+}
+
+.advanced-editor-head span {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.advanced-notepad-area {
+  min-height: 520px;
+  padding: 18px;
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(6, 10, 16, 0.98), rgba(8, 11, 18, 0.98)),
+    #070c12;
+  color: #d8e7f7;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  line-height: 1.5;
+  white-space: pre;
+  overflow: auto;
+}
+
 .sandbox-section {
   padding: 12px 0 0;
   scroll-margin-top: 30px;

@@ -101,7 +101,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             filtered_names = [display_name for _mod_value, display_name, _workshop_value in filtered_rows]
             for field in ini_document.fields:
                 if field.key == "Mods":
-                    field.value = ";".join(f"\\{value.lstrip('\\')}" for value in filtered_mods)
+                    field.value = ";".join(value.lstrip("\\") for value in filtered_mods)
                 elif field.key == "WorkshopItems":
                     field.value = ";".join(filtered_workshop)
             write_ini_file(ini_file, ini_document)

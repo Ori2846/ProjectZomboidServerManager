@@ -78,6 +78,7 @@ function App() {
   const [sandboxValues, setSandboxValues] = useState({})
   const [sandboxRaw, setSandboxRaw] = useState('')
   const [advancedValues, setAdvancedValues] = useState({})
+  const [selectedAdvancedFile, setSelectedAdvancedFile] = useState('')
   const [navTarget, setNavTarget] = useState('')
   const [panelState, setPanelState] = useState(() => {
     const saved = loadPanelState()
@@ -117,6 +118,7 @@ function App() {
     setSandboxValues(Object.fromEntries(page.sandbox.fields.filter((field) => field.valueType !== 'section').map((field) => [field.path, field.value])))
     setSandboxRaw(page.sandbox.rawText)
     setAdvancedValues(Object.fromEntries(page.advancedFiles.map((file) => [file.label, file.content])))
+    setSelectedAdvancedFile((current) => (page.advancedFiles.some((file) => file.label === current) ? current : page.advancedFiles[0]?.label ?? ''))
     const firstUser = page.users.users[0]?.username ?? ''
     setSelectedUser((current) => (page.users.users.some((user) => user.username === current) ? current : firstUser))
   }, [page])
@@ -314,6 +316,8 @@ function App() {
             setSandboxRaw={setSandboxRaw}
             advancedValues={advancedValues}
             setAdvancedValues={setAdvancedValues}
+            selectedAdvancedFile={selectedAdvancedFile}
+            setSelectedAdvancedFile={setSelectedAdvancedFile}
           />
         </section>
       </div>

@@ -38,6 +38,8 @@ export function MainPanels(props) {
     setSandboxRaw,
     advancedValues,
     setAdvancedValues,
+    selectedAdvancedFile,
+    setSelectedAdvancedFile,
   } = props
 
   const currentUser = page.users.users.find((user) => user.username === selectedUser) || null
@@ -146,48 +148,24 @@ export function MainPanels(props) {
       <PlayerPanels page={page} liveRunning={liveRunning} busyAction={busyAction} panelState={panelState} togglePanel={togglePanel} submitForm={submitForm} selectedUser={selectedUser} setSelectedUser={setSelectedUser} selectedAccessLevel={selectedAccessLevel} setSelectedAccessLevel={setSelectedAccessLevel} selectedEvent={selectedEvent} setSelectedEvent={setSelectedEvent} eventCount={eventCount} setEventCount={setEventCount} eventRadius={eventRadius} setEventRadius={setEventRadius} currentUser={currentUser} currentEvent={currentEvent} />
 
       <Panel title="SandboxVars" subtitle={page.paths.sandbox} panelKey="sandboxvars" open={panelState.sandboxvars} onToggle={togglePanel}>
-        {page.sandbox.parseError ? (
-          <form className="form-grid" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-sandbox-raw', [['server_dir', page.serverDir], ['server_name', page.serverName], ['sandbox_raw', sandboxRaw]], 'save-sandbox-raw') }}>
-            <div className="button-row top-actions">
-              <button type="submit" disabled={busyAction === 'save-sandbox-raw'}>Save Raw SandboxVars</button>
+        <form className="sandbox-stack" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-sandbox-raw', [['server_dir', page.serverDir], ['server_name', page.serverName], ['sandbox_raw', sandboxRaw]], 'save-sandbox-raw') }}>
+          <div className="button-row top-actions">
+            <button type="submit" disabled={busyAction === 'save-sandbox-raw'}>Save SandboxVars</button>
+          </div>
+          {page.sandbox.parseError ? <div className="status-banner warning">SandboxVars parser fallback: {page.sandbox.parseError}</div> : null}
+          <div className="advanced-editor">
+            <div className="advanced-editor-head">
+              <strong>SandboxVars</strong>
+              <span>{page.paths.sandbox}</span>
             </div>
-            <div className="status-banner warning">SandboxVars parser fallback: {page.sandbox.parseError}</div>
-            <Field label="Raw SandboxVars"><textarea value={sandboxRaw} onChange={(event) => setSandboxRaw(event.target.value)} /></Field>
-          </form>
-        ) : page.sandbox.fields.length ? (
-          <>
-            <div className="jump-bar">
-              <Field label="Jump To Sandbox Setting">
-                <select onChange={(event) => document.getElementById(event.target.value)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
-                  <option value="">Choose a sandbox setting</option>
-                  {page.sandbox.fields.map((field) => <option key={field.id} value={field.id}>{field.path}</option>)}
-                </select>
-              </Field>
-            </div>
-            <form className="sandbox-stack" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-sandbox', [['server_dir', page.serverDir], ['server_name', page.serverName], ...page.sandbox.fields.flatMap((field) => field.valueType === 'section' ? [] : [[`sandbox__${field.path}`, sandboxValues[field.path] ?? ''], [`sandbox_type__${field.path}`, field.valueType]])], 'save-sandbox') }}>
-              <div className="button-row top-actions">
-                <button type="submit" disabled={busyAction === 'save-sandbox'}>Save SandboxVars</button>
-              </div>
-              {page.sandbox.fields.map((field) => field.valueType === 'section' ? (
-                <div key={field.id} id={field.id} className="sandbox-section" style={{ marginLeft: `${field.depth * 20}px` }}>
-                  <h3>{field.label}</h3>
-                  {field.comments ? <p className="field-help">{field.comments}</p> : null}
-                </div>
-              ) : (
-                <SettingCard key={field.id} id={field.id} label={field.label} help={field.comments} indent={field.depth} compact>
-                  {field.valueType === 'bool' ? (
-                    <select value={sandboxValues[field.path] ?? 'false'} onChange={(event) => setSandboxValues((current) => ({ ...current, [field.path]: event.target.value }))}>
-                      <option value="true">True</option>
-                      <option value="false">False</option>
-                    </select>
-                  ) : (
-                    <input value={sandboxValues[field.path] ?? ''} onChange={(event) => setSandboxValues((current) => ({ ...current, [field.path]: event.target.value }))} />
-                  )}
-                </SettingCard>
-              ))}
-            </form>
-          </>
-        ) : <p className="empty-state">No SandboxVars file found yet. Load a server with an existing file or save one first.</p>}
+            <textarea
+              className="advanced-notepad-area"
+              value={sandboxRaw}
+              onChange={(event) => setSandboxRaw(event.target.value)}
+              spellCheck={false}
+            />
+          </div>
+        </form>
       </Panel>
 
       <Panel title="Advanced Files" subtitle="Raw editors for the remaining Lua-based files." panelKey="advanced-files" open={panelState['advanced-files']} onToggle={togglePanel}>
@@ -195,12 +173,36 @@ export function MainPanels(props) {
           <div className="button-row top-actions">
             <button type="submit" disabled={busyAction === 'save-advanced'}>Save Advanced Files</button>
           </div>
-          {page.advancedFiles.map((file) => (
-            <section key={file.label} className="editor-card">
-              <div className="editor-head"><h3>{file.label}</h3><p>{file.path}</p></div>
-              <textarea value={advancedValues[file.label] ?? ''} onChange={(event) => setAdvancedValues((current) => ({ ...current, [file.label]: event.target.value }))} />
+          {page.advancedFiles.length ? (
+            <section className="advanced-notepad">
+              <div className="advanced-file-list" role="tablist" aria-label="Advanced files">
+                {page.advancedFiles.map((file) => (
+                  <button
+                    key={file.label}
+                    type="button"
+                    className={`advanced-file-tab ${selectedAdvancedFile === file.label ? 'active' : ''}`}
+                    onClick={() => setSelectedAdvancedFile(file.label)}
+                  >
+                    {file.label}
+                  </button>
+                ))}
+              </div>
+              {page.advancedFiles.filter((file) => file.label === selectedAdvancedFile).map((file) => (
+                <div key={file.label} className="advanced-editor">
+                  <div className="advanced-editor-head">
+                    <strong>{file.label}</strong>
+                    <span>{file.path}</span>
+                  </div>
+                  <textarea
+                    className="advanced-notepad-area"
+                    value={advancedValues[file.label] ?? ''}
+                    onChange={(event) => setAdvancedValues((current) => ({ ...current, [file.label]: event.target.value }))}
+                    spellCheck={false}
+                  />
+                </div>
+              ))}
             </section>
-          ))}
+          ) : <p className="empty-state">No advanced files found for this server yet.</p>}
         </form>
       </Panel>
 
