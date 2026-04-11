@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { Field, InfoBlock, InfoLine, Panel, SettingCard } from './UiBits.jsx'
 
 export function MainPanels(props) {
@@ -6,9 +7,8 @@ export function MainPanels(props) {
     liveLogs,
     liveRunning,
     liveServerPid,
+    activeSection,
     busyAction,
-    panelState,
-    togglePanel,
     submitForm,
     consoleCommand,
     setConsoleCommand,
@@ -24,6 +24,10 @@ export function MainPanels(props) {
     setEventCount,
     eventRadius,
     setEventRadius,
+    profileSelection,
+    setProfileSelection,
+    profileNameInput,
+    setProfileNameInput,
     targetForm,
     setTargetForm,
     launchForm,
@@ -43,121 +47,48 @@ export function MainPanels(props) {
   const currentUser = page.users.users.find((user) => user.username === selectedUser) || null
   const currentEvent = page.playerEvents.find((event) => event.id === selectedEvent) || page.playerEvents[0]
 
-  return (
-    <div className="panel-stack">
-      <ServerTargetPanel
-        page={page}
-        busyAction={busyAction}
-        panelState={panelState}
-        togglePanel={togglePanel}
-        submitForm={submitForm}
-        targetForm={targetForm}
-        setTargetForm={setTargetForm}
-      />
-
-      <ServerProcessPanel
-        page={page}
-        liveRunning={liveRunning}
-        liveServerPid={liveServerPid}
-        busyAction={busyAction}
-        panelState={panelState}
-        togglePanel={togglePanel}
-        submitForm={submitForm}
-        launchForm={launchForm}
-        setLaunchForm={setLaunchForm}
-      />
-
-      <LiveConsolePanel
-        liveLogs={liveLogs}
-        busyAction={busyAction}
-        panelState={panelState}
-        togglePanel={togglePanel}
-        submitForm={submitForm}
-        consoleCommand={consoleCommand}
-        setConsoleCommand={setConsoleCommand}
-      />
-
-      <CommonSettingsPanel
-        page={page}
-        busyAction={busyAction}
-        panelState={panelState}
-        togglePanel={togglePanel}
-        submitForm={submitForm}
-        commonValues={commonValues}
-        setCommonValues={setCommonValues}
-      />
-
-      <ModsWorkshopPanel
-        page={page}
-        busyAction={busyAction}
-        panelState={panelState}
-        togglePanel={togglePanel}
-        submitForm={submitForm}
-        modRows={modRows}
-        setModRows={setModRows}
-      />
-
-      <PlayerPanels
-        page={page}
-        liveRunning={liveRunning}
-        busyAction={busyAction}
-        panelState={panelState}
-        togglePanel={togglePanel}
-        submitForm={submitForm}
-        selectedUser={selectedUser}
-        setSelectedUser={setSelectedUser}
-        selectedAccessLevel={selectedAccessLevel}
-        setSelectedAccessLevel={setSelectedAccessLevel}
-        selectedEvent={selectedEvent}
-        setSelectedEvent={setSelectedEvent}
-        eventCount={eventCount}
-        setEventCount={setEventCount}
-        eventRadius={eventRadius}
-        setEventRadius={setEventRadius}
-        currentUser={currentUser}
-        currentEvent={currentEvent}
-      />
-
-      <SandboxPanel
-        page={page}
-        busyAction={busyAction}
-        panelState={panelState}
-        togglePanel={togglePanel}
-        submitForm={submitForm}
-        sandboxRaw={sandboxRaw}
-        setSandboxRaw={setSandboxRaw}
-      />
-
-      <AdvancedFilesPanel
-        page={page}
-        busyAction={busyAction}
-        panelState={panelState}
-        togglePanel={togglePanel}
-        submitForm={submitForm}
-        advancedValues={advancedValues}
-        setAdvancedValues={setAdvancedValues}
-        selectedAdvancedFile={selectedAdvancedFile}
-        setSelectedAdvancedFile={setSelectedAdvancedFile}
-      />
-
-      <MaintenancePanel
-        page={page}
-        busyAction={busyAction}
-        panelState={panelState}
-        togglePanel={togglePanel}
-        submitForm={submitForm}
-        resetConfirmation={resetConfirmation}
-        setResetConfirmation={setResetConfirmation}
-      />
-    </div>
-  )
+  switch (activeSection) {
+    case 'server-target':
+      return <ServerTargetPanel page={page} busyAction={busyAction} submitForm={submitForm} profileSelection={profileSelection} setProfileSelection={setProfileSelection} profileNameInput={profileNameInput} setProfileNameInput={setProfileNameInput} targetForm={targetForm} setTargetForm={setTargetForm} />
+    case 'server-process':
+      return <ServerProcessPanel page={page} liveRunning={liveRunning} liveServerPid={liveServerPid} busyAction={busyAction} submitForm={submitForm} launchForm={launchForm} setLaunchForm={setLaunchForm} />
+    case 'live-console':
+      return <LiveConsolePanel liveLogs={liveLogs} busyAction={busyAction} submitForm={submitForm} consoleCommand={consoleCommand} setConsoleCommand={setConsoleCommand} />
+    case 'common-settings':
+      return <CommonSettingsPanel page={page} busyAction={busyAction} submitForm={submitForm} commonValues={commonValues} setCommonValues={setCommonValues} />
+    case 'mods-workshop':
+      return <ModsWorkshopPanel page={page} busyAction={busyAction} submitForm={submitForm} modRows={modRows} setModRows={setModRows} />
+    case 'players-admin':
+      return <PlayerPanels page={page} liveRunning={liveRunning} busyAction={busyAction} submitForm={submitForm} selectedUser={selectedUser} setSelectedUser={setSelectedUser} selectedAccessLevel={selectedAccessLevel} setSelectedAccessLevel={setSelectedAccessLevel} selectedEvent={selectedEvent} setSelectedEvent={setSelectedEvent} eventCount={eventCount} setEventCount={setEventCount} eventRadius={eventRadius} setEventRadius={setEventRadius} currentUser={currentUser} currentEvent={currentEvent} />
+    case 'sandboxvars':
+      return <SandboxPanel page={page} busyAction={busyAction} submitForm={submitForm} sandboxRaw={sandboxRaw} setSandboxRaw={setSandboxRaw} />
+    case 'advanced-files':
+      return <AdvancedFilesPanel page={page} busyAction={busyAction} submitForm={submitForm} advancedValues={advancedValues} setAdvancedValues={setAdvancedValues} selectedAdvancedFile={selectedAdvancedFile} setSelectedAdvancedFile={setSelectedAdvancedFile} />
+    case 'maintenance':
+      return <MaintenancePanel page={page} busyAction={busyAction} submitForm={submitForm} resetConfirmation={resetConfirmation} setResetConfirmation={setResetConfirmation} />
+    default:
+      return null
+  }
 }
 
-function ServerTargetPanel({ page, busyAction, panelState, togglePanel, submitForm, targetForm, setTargetForm }) {
+function ServerTargetPanel({ page, busyAction, submitForm, profileSelection, setProfileSelection, profileNameInput, setProfileNameInput, targetForm, setTargetForm }) {
   return (
-    <Panel title="Server Target" subtitle={`${page.serverDir} | ${page.serverName}`} panelKey="server-target" open={panelState['server-target']} onToggle={togglePanel}>
+    <Panel title="Server Target" subtitle={`${page.serverDir} | ${page.serverName}`} panelKey="server-target">
       <form className="form-grid" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/select-server', [['server_dir', targetForm.serverDir], ['server_name', targetForm.serverName]], 'load-server') }}>
+        <Field label="Saved Profile">
+          <select value={profileSelection} onChange={(event) => setProfileSelection(event.target.value)}>
+            {page.profiles.map((profile) => <option key={profile} value={profile}>{profile}</option>)}
+          </select>
+        </Field>
+        <div className="button-row">
+          <button type="button" className="secondary" disabled={busyAction === 'load-profile'} onClick={() => submitForm('/api/select-profile', [['profile_name', profileSelection]], 'load-profile')}>Load Profile</button>
+          <button type="button" className="secondary" disabled={busyAction === 'delete-profile' || page.profiles.length <= 1} onClick={() => submitForm('/api/delete-profile', [['profile_name', profileSelection]], 'delete-profile')}>Delete Profile</button>
+        </div>
+        <Field label="Save Current As Profile">
+          <input value={profileNameInput} onChange={(event) => setProfileNameInput(event.target.value)} placeholder="default" />
+        </Field>
         <div className="button-row top-actions">
+          <button type="button" className="secondary" disabled={busyAction === 'save-profile'} onClick={() => submitForm('/api/save-profile', [['profile_name', profileNameInput]], 'save-profile')}>Save Profile</button>
           <button type="submit" disabled={busyAction === 'load-server'}>Load Server</button>
         </div>
         <Field label="Server Folder"><input value={targetForm.serverDir} onChange={(event) => setTargetForm((current) => ({ ...current, serverDir: event.target.value }))} /></Field>
@@ -167,16 +98,17 @@ function ServerTargetPanel({ page, busyAction, panelState, togglePanel, submitFo
   )
 }
 
-function ServerProcessPanel({ page, liveRunning, liveServerPid, busyAction, panelState, togglePanel, submitForm, launchForm, setLaunchForm }) {
+function ServerProcessPanel({ page, liveRunning, liveServerPid, busyAction, submitForm, launchForm, setLaunchForm }) {
   return (
-    <Panel title="Server Process" subtitle="Launch and control the dedicated server from the manager." badge={<span className={`pill ${liveRunning ? 'success' : 'warning'}`}>{liveRunning ? 'Running' : 'Stopped'}{liveRunning && liveServerPid ? ` | PID ${liveServerPid}` : ''}</span>} panelKey="server-process" open={panelState['server-process']} onToggle={togglePanel}>
+    <Panel title="Server Process" subtitle="Launch and control the dedicated server from the manager." badge={<span className={`pill ${liveRunning ? 'success' : 'warning'}`}>{liveRunning ? 'Running' : 'Stopped'}{liveRunning && liveServerPid ? ` | PID ${liveServerPid}` : ''}</span>} panelKey="server-process">
       <form className="form-grid" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-launch', [['launch_command', launchForm.launchCommand], ['launch_workdir', launchForm.launchWorkdir]], 'save-launch') }}>
         <div className="button-row top-actions">
           <button type="submit" disabled={busyAction === 'save-launch'}>Save Launch Settings</button>
-          <button type="button" className="secondary" disabled={busyAction === 'update-server' || liveRunning} onClick={() => submitForm('/api/update-server', [], 'update-server')}>Update Server</button>
+          <button type="button" className="secondary muted-action" disabled title="Update Server is currently out of service.">Update Server</button>
           <button type="button" className="secondary" disabled={busyAction === 'start-server'} onClick={() => submitForm('/api/start-server', [], 'start-server')}>Start Server</button>
           <button type="button" className="secondary" disabled={busyAction === 'stop-server'} onClick={() => submitForm('/api/stop-server', [], 'stop-server')}>Stop Server</button>
         </div>
+        <p className="field-help">Update Server is currently out of service.</p>
         <p className="field-help">SteamCMD path: {page.serverVersion?.steamcmdPath || 'Not found from the current install metadata.'}</p>
         <Field label="Launch Command"><input value={launchForm.launchCommand} onChange={(event) => setLaunchForm((current) => ({ ...current, launchCommand: event.target.value }))} placeholder="StartServer64.bat -servername servertest" /></Field>
         <Field label="Launch Working Directory"><input value={launchForm.launchWorkdir} onChange={(event) => setLaunchForm((current) => ({ ...current, launchWorkdir: event.target.value }))} /></Field>
@@ -185,9 +117,17 @@ function ServerProcessPanel({ page, liveRunning, liveServerPid, busyAction, pane
   )
 }
 
-function LiveConsolePanel({ liveLogs, busyAction, panelState, togglePanel, submitForm, consoleCommand, setConsoleCommand }) {
+function LiveConsolePanel({ liveLogs, busyAction, submitForm, consoleCommand, setConsoleCommand }) {
+  const consoleRef = useRef(null)
+
+  useEffect(() => {
+    const element = consoleRef.current
+    if (!element) return
+    element.scrollTop = element.scrollHeight
+  }, [liveLogs])
+
   return (
-    <Panel title="Live Console" subtitle="Send commands, clear the visible buffer, and watch output update in place." panelKey="live-console" open={panelState['live-console']} onToggle={togglePanel}>
+    <Panel title="Live Console" subtitle="Send commands, clear the visible buffer, and watch output update in place." panelKey="live-console">
       <form className="console-form" onSubmit={async (event) => { event.preventDefault(); const ok = await submitForm('/api/send-command', [['console_command', consoleCommand]], 'send-command'); if (ok) setConsoleCommand('') }}>
         <div className="button-row top-actions">
           <button type="submit" disabled={busyAction === 'send-command'}>Send Command</button>
@@ -195,14 +135,14 @@ function LiveConsolePanel({ liveLogs, busyAction, panelState, togglePanel, submi
         </div>
         <Field label="Console Command"><input value={consoleCommand} onChange={(event) => setConsoleCommand(event.target.value)} placeholder="save, quit, help, players" /></Field>
       </form>
-      <pre className="log-console">{liveLogs.join('\n')}</pre>
+      <pre ref={consoleRef} className="log-console">{liveLogs.join('\n')}</pre>
     </Panel>
   )
 }
 
-function CommonSettingsPanel({ page, busyAction, panelState, togglePanel, submitForm, commonValues, setCommonValues }) {
+function CommonSettingsPanel({ page, busyAction, submitForm, commonValues, setCommonValues }) {
   return (
-    <Panel title="Common Settings" subtitle={page.paths.ini} panelKey="common-settings" open={panelState['common-settings']} onToggle={togglePanel}>
+    <Panel title="Common Settings" subtitle={page.paths.ini} panelKey="common-settings">
       <div className="jump-bar">
         <Field label="Jump To Setting">
           <select onChange={(event) => document.getElementById(event.target.value)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
@@ -234,9 +174,9 @@ function CommonSettingsPanel({ page, busyAction, panelState, togglePanel, submit
   )
 }
 
-function ModsWorkshopPanel({ page, busyAction, panelState, togglePanel, submitForm, modRows, setModRows }) {
+function ModsWorkshopPanel({ page, busyAction, submitForm, modRows, setModRows }) {
   return (
-    <Panel title="Mods And Workshop Items" subtitle="Keep folder names, manager labels, and workshop IDs aligned." panelKey="mods-workshop" open={panelState['mods-workshop']} onToggle={togglePanel}>
+    <Panel title="Mods And Workshop Items" subtitle="Keep folder names, manager labels, and workshop IDs aligned." panelKey="mods-workshop">
       {page.mods.available ? (
         <form className="form-grid" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-mods', [['server_dir', page.serverDir], ['server_name', page.serverName], ['ini_pair_mods', modRows.map((row) => row.mod)], ['mod_display_name', modRows.map((row) => row.displayName)], ['ini_pair_workshop', modRows.map((row) => row.workshopId)]], 'save-mods') }}>
           <div className="button-row top-actions">
@@ -271,9 +211,9 @@ function ModsWorkshopPanel({ page, busyAction, panelState, togglePanel, submitFo
   )
 }
 
-function PlayerPanels({ page, liveRunning, busyAction, panelState, togglePanel, submitForm, selectedUser, setSelectedUser, selectedAccessLevel, setSelectedAccessLevel, selectedEvent, setSelectedEvent, eventCount, setEventCount, eventRadius, setEventRadius, currentUser, currentEvent }) {
+function PlayerPanels({ page, liveRunning, busyAction, submitForm, selectedUser, setSelectedUser, selectedAccessLevel, setSelectedAccessLevel, selectedEvent, setSelectedEvent, eventCount, setEventCount, eventRadius, setEventRadius, currentUser, currentEvent }) {
   return (
-    <Panel title="Players And Permissions" subtitle={page.users.available ? page.users.dbPath : 'No Project Zomboid server database found for this server name yet.'} panelKey="players-admin" open={panelState['players-admin']} onToggle={togglePanel}>
+    <Panel title="Players And Permissions" subtitle={page.users.available ? page.users.dbPath : 'No Project Zomboid server database found for this server name yet.'} panelKey="players-admin">
       {page.users.available ? (
         <div className="players-layout">
           <section className="players-card">
@@ -342,9 +282,9 @@ function PlayerPanels({ page, liveRunning, busyAction, panelState, togglePanel, 
   )
 }
 
-function SandboxPanel({ page, busyAction, panelState, togglePanel, submitForm, sandboxRaw, setSandboxRaw }) {
+function SandboxPanel({ page, busyAction, submitForm, sandboxRaw, setSandboxRaw }) {
   return (
-    <Panel title="SandboxVars" subtitle={page.paths.sandbox} panelKey="sandboxvars" open={panelState.sandboxvars} onToggle={togglePanel}>
+    <Panel title="SandboxVars" subtitle={page.paths.sandbox} panelKey="sandboxvars">
       <form className="sandbox-stack" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-sandbox-raw', [['server_dir', page.serverDir], ['server_name', page.serverName], ['sandbox_raw', sandboxRaw]], 'save-sandbox-raw') }}>
         <div className="button-row top-actions">
           <button type="submit" disabled={busyAction === 'save-sandbox-raw'}>Save SandboxVars</button>
@@ -356,11 +296,11 @@ function SandboxPanel({ page, busyAction, panelState, togglePanel, submitForm, s
   )
 }
 
-function AdvancedFilesPanel({ page, busyAction, panelState, togglePanel, submitForm, advancedValues, setAdvancedValues, selectedAdvancedFile, setSelectedAdvancedFile }) {
+function AdvancedFilesPanel({ page, busyAction, submitForm, advancedValues, setAdvancedValues, selectedAdvancedFile, setSelectedAdvancedFile }) {
   const currentFile = page.advancedFiles.find((file) => file.label === selectedAdvancedFile) || page.advancedFiles[0] || null
 
   return (
-    <Panel title="Advanced Files" subtitle="Raw editors for the remaining Lua-based files." panelKey="advanced-files" open={panelState['advanced-files']} onToggle={togglePanel}>
+    <Panel title="Advanced Files" subtitle="Raw editors for the remaining Lua-based files." panelKey="advanced-files">
       <form className="advanced-stack" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-advanced', [['server_dir', page.serverDir], ['server_name', page.serverName], ...page.advancedFiles.map((file) => [`raw_${file.label}`, advancedValues[file.label] ?? ''])], 'save-advanced') }}>
         <div className="button-row top-actions">
           <button type="submit" disabled={busyAction === 'save-advanced'}>Save Advanced Files</button>
@@ -394,9 +334,9 @@ function AdvancedFilesPanel({ page, busyAction, panelState, togglePanel, submitF
   )
 }
 
-function MaintenancePanel({ page, busyAction, panelState, togglePanel, submitForm, resetConfirmation, setResetConfirmation }) {
+function MaintenancePanel({ page, busyAction, submitForm, resetConfirmation, setResetConfirmation }) {
   return (
-    <Panel title="Maintenance" subtitle="Danger zone actions for save data." panelKey="maintenance" open={panelState.maintenance} onToggle={togglePanel}>
+    <Panel title="Maintenance" subtitle={`Danger zone actions for profile ${page.selectedProfile}.`} panelKey="maintenance">
       <form className="danger-form" onSubmit={async (event) => { event.preventDefault(); const ok = await submitForm('/api/reset-map', [['reset_confirmation', resetConfirmation]], 'reset-map'); if (ok) setResetConfirmation('') }}>
         <div className="button-row top-actions">
           <button type="submit" className="danger" disabled={busyAction === 'reset-map'}>Reset Map</button>

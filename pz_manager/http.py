@@ -9,11 +9,11 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .config import ADVANCED_FILES, DEFAULT_SAVES_DIR, DEFAULT_SERVER_DIR
-from .files import advanced_path, ini_path, normalize_server_dir, parse_ini_file, reset_saves_directory, write_ini_file
+from .files import advanced_path, ini_path, multiplayer_save_path, normalize_server_dir, parse_ini_file, reset_saves_directory, write_ini_file
 from .logs import clear_log_history, current_logs
 from .processes import command_channel_available, is_server_running, launch_server_update, send_server_command, start_server, stop_server
 from .sandbox_vars import coerce_sandbox_value, load_sandbox_vars, save_sandbox_vars, update_sandbox_value
-from .state import STATE, save_state, set_mod_display_names
+from .state import STATE, delete_profile, load_profile, save_profile, save_state, set_mod_display_names, sync_selected_profile
 from .users import set_user_access_level
 from .views import build_page_data, render_app_shell
 
@@ -45,6 +45,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             server_name = form.get("server_name", ["servertest"])[0].strip() or "servertest"
             STATE.server_dir = server_dir
             STATE.server_name = server_name
+            sync_selected_profile()
             save_state()
             if ini_path(server_dir, server_name).exists():
                 STATE.status_message = f"Loaded {server_name} from {server_dir}"
@@ -52,6 +53,60 @@ class RequestHandler(BaseHTTPRequestHandler):
             else:
                 STATE.status_message = "Server file not found yet. Saving will create it."
                 STATE.status_level = "warning"
+            self.respond_action(wants_json)
+            return
+
+        if action_path == "/save-profile":
+            profile_name = form.get("profile_name", [""])[0].strip() or STATE.selected_profile
+            selected_name = save_profile(profile_name)
+            save_state()
+            STATE.status_message = f"Saved profile {selected_name}"
+            STATE.status_level = "success"
+            self.respond_action(wants_json)
+            return
+
+        if action_path == "/select-profile":
+            if is_server_running():
+                STATE.status_message = "Stop the running server before switching profiles."
+                STATE.status_level = "warning"
+                self.respond_action(wants_json)
+                return
+            profile_name = form.get("profile_name", [""])[0].strip()
+            try:
+                selected_name = load_profile(profile_name, normalize_server_dir)
+            except KeyError:
+                STATE.status_message = f"Profile not found: {profile_name}"
+                STATE.status_level = "warning"
+                self.respond_action(wants_json)
+                return
+            save_state()
+            STATE.status_message = f"Loaded profile {selected_name}"
+            STATE.status_level = "success"
+            self.respond_action(wants_json)
+            return
+
+        if action_path == "/delete-profile":
+            if is_server_running():
+                STATE.status_message = "Stop the running server before deleting profiles."
+                STATE.status_level = "warning"
+                self.respond_action(wants_json)
+                return
+            profile_name = form.get("profile_name", [""])[0].strip()
+            try:
+                selected_name = delete_profile(profile_name, normalize_server_dir)
+            except KeyError:
+                STATE.status_message = f"Profile not found: {profile_name}"
+                STATE.status_level = "warning"
+                self.respond_action(wants_json)
+                return
+            except ValueError:
+                STATE.status_message = "At least one profile must remain."
+                STATE.status_level = "warning"
+                self.respond_action(wants_json)
+                return
+            save_state()
+            STATE.status_message = f"Deleted profile {profile_name}. Active profile: {selected_name}"
+            STATE.status_level = "success"
             self.respond_action(wants_json)
             return
 
@@ -67,6 +122,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             write_ini_file(ini_file, ini_document)
             STATE.server_dir = server_dir
             STATE.server_name = server_name
+            sync_selected_profile()
             save_state()
             STATE.status_message = f"Saved {ini_file.name}"
             STATE.status_level = "success"
@@ -106,6 +162,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                     field.value = ";".join(filtered_workshop)
             write_ini_file(ini_file, ini_document)
             set_mod_display_names(filtered_names)
+            sync_selected_profile()
             save_state()
             STATE.status_message = "Saved Mods, WorkshopItems, and manager labels"
             STATE.status_level = "success"
@@ -116,6 +173,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             STATE.launch_command = form.get("launch_command", [""])[0].strip()
             workdir_value = form.get("launch_workdir", [""])[0] or str(Path.cwd())
             STATE.launch_workdir = normalize_server_dir(workdir_value)
+            sync_selected_profile()
             save_state()
             STATE.status_message = "Saved launch settings"
             STATE.status_level = "success"
@@ -211,7 +269,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 STATE.status_level = "warning"
                 self.respond_action(wants_json)
                 return
-            ok, message = reset_saves_directory(DEFAULT_SAVES_DIR)
+            ok, message = reset_saves_directory(multiplayer_save_path(STATE.server_name, DEFAULT_SAVES_DIR))
             STATE.status_message = message
             STATE.status_level = "success" if ok else "warning"
             self.respond_action(wants_json)
@@ -235,6 +293,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 target.write_text(form.get(f"raw_{label}", [""])[0], encoding="utf-8")
             STATE.server_dir = server_dir
             STATE.server_name = server_name
+            sync_selected_profile()
             save_state()
             STATE.status_message = "Saved advanced server files"
             STATE.status_level = "success"
@@ -256,6 +315,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             save_sandbox_vars(sandbox_file, sandbox_data)
             STATE.server_dir = server_dir
             STATE.server_name = server_name
+            sync_selected_profile()
             save_state()
             STATE.status_message = f"Saved {sandbox_file.name}"
             STATE.status_level = "success"
@@ -270,6 +330,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             sandbox_file.write_text(form.get("sandbox_raw", [""])[0], encoding="utf-8")
             STATE.server_dir = server_dir
             STATE.server_name = server_name
+            sync_selected_profile()
             save_state()
             STATE.status_message = f"Saved raw {sandbox_file.name}"
             STATE.status_level = "success"

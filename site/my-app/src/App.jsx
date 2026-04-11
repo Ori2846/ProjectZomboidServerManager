@@ -38,18 +38,6 @@ export function toFormBody(entries) {
   return body
 }
 
-function loadPanelState() {
-  try {
-    return JSON.parse(localStorage.getItem('pz-manager-panel-state') || '{}')
-  } catch {
-    return {}
-  }
-}
-
-function savePanelState(state) {
-  localStorage.setItem('pz-manager-panel-state', JSON.stringify(state))
-}
-
 function statusTone(level) {
   if (level === 'success') return 'success'
   if (level === 'warning') return 'warning'
@@ -71,6 +59,8 @@ function App() {
   const [selectedEvent, setSelectedEvent] = useState('lightning')
   const [eventCount, setEventCount] = useState('12')
   const [eventRadius, setEventRadius] = useState('4')
+  const [profileSelection, setProfileSelection] = useState('')
+  const [profileNameInput, setProfileNameInput] = useState('')
   const [targetForm, setTargetForm] = useState({ serverDir: '', serverName: '' })
   const [launchForm, setLaunchForm] = useState({ launchCommand: '', launchWorkdir: '' })
   const [commonValues, setCommonValues] = useState({})
@@ -78,14 +68,7 @@ function App() {
   const [sandboxRaw, setSandboxRaw] = useState('')
   const [advancedValues, setAdvancedValues] = useState({})
   const [selectedAdvancedFile, setSelectedAdvancedFile] = useState('')
-  const [navTarget, setNavTarget] = useState('')
-  const [panelState, setPanelState] = useState(() => {
-    const saved = loadPanelState()
-    return PANEL_KEYS.reduce((acc, key, index) => {
-      acc[key] = saved[key] ?? index < 2
-      return acc
-    }, {})
-  })
+  const [activeSection, setActiveSection] = useState(PANEL_KEYS[0])
 
   const applyPageData = (nextPage) => {
     startTransition(() => {
@@ -110,6 +93,8 @@ function App() {
 
   useEffect(() => {
     if (!page) return
+    setProfileSelection(page.selectedProfile)
+    setProfileNameInput(page.selectedProfile)
     setTargetForm({ serverDir: page.serverDir, serverName: page.serverName })
     setLaunchForm({ launchCommand: page.launchCommand, launchWorkdir: page.launchWorkdir })
     setCommonValues(Object.fromEntries(page.commonSettings.map((field) => [field.key, field.value])))
@@ -142,27 +127,6 @@ function App() {
     const timer = window.setInterval(() => pollLogs().catch(() => {}), 1500)
     return () => window.clearInterval(timer)
   }, [page?.serverDir, page?.serverName, pollLogs])
-
-  const togglePanel = (key) => {
-    setPanelState((current) => {
-      const next = { ...current, [key]: !current[key] }
-      savePanelState(next)
-      return next
-    })
-  }
-
-  const jumpToPanel = (key) => {
-    if (!key) return
-    setNavTarget(key)
-    setPanelState((current) => {
-      const next = current[key] ? current : { ...current, [key]: true }
-      savePanelState(next)
-      return next
-    })
-    window.setTimeout(() => {
-      document.getElementById(`panel-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 60)
-  }
 
   const submitForm = async (path, entries, actionLabel) => {
     setBusyAction(actionLabel)
@@ -198,21 +162,12 @@ function App() {
           <p className="brand-kicker">Project Zomboid</p>
           <div>
             <h1>Server Admin Panel</h1>
-            <p>{page.serverName}</p>
-          </div>
-        </div>
-        <div className="topbar-meta">
-          <div className="topbar-stat">
-            <span>Installed Build</span>
-            <strong>{page.serverVersion?.display || 'Unavailable'}</strong>
-          </div>
-          <div className="topbar-stat">
-            <span>Network</span>
-            <strong>{page.accessUrl}</strong>
-          </div>
-          <div className={`topbar-status ${liveRunning ? 'success' : 'warning'}`}>
-            <span>{liveRunning ? 'Running' : 'Stopped'}</span>
-            <strong>{liveRunning && liveServerPid ? `PID ${liveServerPid}` : 'No process'}</strong>
+            <div className="brand-status-row">
+              <p>{page.serverName}</p>
+              <span className={`pill ${liveRunning ? 'success' : 'warning'}`}>
+                {liveRunning ? `Running${liveServerPid ? ` | PID ${liveServerPid}` : ''}` : 'Stopped'}
+              </span>
+            </div>
           </div>
         </div>
       </header>
@@ -223,21 +178,24 @@ function App() {
             <p className="sidebar-label">Workspace</p>
             <strong>{page.serverName}</strong>
             <span>{page.serverDir}</span>
+            <span>Profile: {page.selectedProfile}</span>
           </div>
 
-          <div className="sidebar-nav" aria-label="Sections">
-            <label className="sidebar-select-wrap">
-              <span className="sidebar-label">Jump To</span>
-              <select value={navTarget} onChange={(event) => jumpToPanel(event.target.value)}>
-                <option value="">Choose a section</option>
-                {PANEL_KEYS.map((key) => (
-                  <option key={key} value={key}>
-                    {PANEL_LABELS[key]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          <nav className="sidebar-nav" aria-label="Sections">
+            <p className="sidebar-label">Sections</p>
+            <div className="sidebar-nav-list">
+              {PANEL_KEYS.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`sidebar-nav-item ${activeSection === key ? 'active' : ''}`}
+                  onClick={() => setActiveSection(key)}
+                >
+                  {PANEL_LABELS[key]}
+                </button>
+              ))}
+            </div>
+          </nav>
 
           <div className="sidebar-block compact">
             <p className="sidebar-label">Overview</p>
@@ -257,22 +215,6 @@ function App() {
         </aside>
 
         <section className="workspace">
-          <section className="hero-banner">
-            <div className="hero-copy">
-              <p className="eyebrow">Operations Console</p>
-              <h2>{page.serverName}</h2>
-              <p className="subhead">
-                Centralized controls for process management, configuration, user permissions, console commands, and world events.
-              </p>
-            </div>
-            <div className="hero-grid">
-              <div className="stat-card muted"><span>Installed Version</span><strong>{page.serverVersion?.display || 'Unavailable'}</strong></div>
-              <div className="stat-card muted"><span>Server Path</span><strong>{page.serverDir}</strong></div>
-              <div className="stat-card accent"><span>Network Address</span><strong>{page.accessUrl}</strong></div>
-              <div className={`stat-card ${liveRunning ? 'success' : 'warning'}`}><span>Process</span><strong>{liveRunning ? `Online${liveServerPid ? ` | PID ${liveServerPid}` : ''}` : 'Offline'}</strong></div>
-            </div>
-          </section>
-
           {(clientStatus || page.status)?.message ? (
             <div className={`status-banner ${statusTone((clientStatus || page.status).level)}`}>{(clientStatus || page.status).message}</div>
           ) : null}
@@ -282,9 +224,8 @@ function App() {
             liveLogs={liveLogs}
             liveRunning={liveRunning}
             liveServerPid={liveServerPid}
+            activeSection={activeSection}
             busyAction={busyAction}
-            panelState={panelState}
-            togglePanel={togglePanel}
             submitForm={submitForm}
             consoleCommand={consoleCommand}
             setConsoleCommand={setConsoleCommand}
@@ -300,6 +241,10 @@ function App() {
             setEventCount={setEventCount}
             eventRadius={eventRadius}
             setEventRadius={setEventRadius}
+            profileSelection={profileSelection}
+            setProfileSelection={setProfileSelection}
+            profileNameInput={profileNameInput}
+            setProfileNameInput={setProfileNameInput}
             targetForm={targetForm}
             setTargetForm={setTargetForm}
             launchForm={launchForm}

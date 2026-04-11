@@ -10,23 +10,97 @@ from .config import DEFAULT_LAUNCH_COMMAND, DEFAULT_LAUNCH_DIR, DEFAULT_SERVER_D
 
 @dataclass
 class AppState:
+    selected_profile: str = "default"
     server_dir: Path = DEFAULT_SERVER_DIR
     server_name: str = "servertest"
     launch_command: str = DEFAULT_LAUNCH_COMMAND
     launch_workdir: Path = DEFAULT_LAUNCH_DIR
     server_pid: int | None = None
     server_process: subprocess.Popen[str] | None = None
+    profiles: dict[str, dict[str, str]] | None = None
     mod_display_names: dict[str, list[str]] | None = None
     status_message: str = ""
     status_level: str = "info"
 
 
 STATE = AppState()
+STATE.profiles = {}
 STATE.mod_display_names = {}
 
 
 def current_server_key() -> str:
     return f"{STATE.server_dir}|{STATE.server_name}"
+
+
+def _profile_payload() -> dict[str, str]:
+    return {
+        "server_dir": str(STATE.server_dir),
+        "server_name": STATE.server_name,
+        "launch_command": STATE.launch_command,
+        "launch_workdir": str(STATE.launch_workdir),
+    }
+
+
+def ensure_profiles() -> None:
+    if STATE.profiles is None:
+        STATE.profiles = {}
+    if not STATE.profiles:
+        STATE.profiles["default"] = _profile_payload()
+    if not STATE.selected_profile.strip():
+        STATE.selected_profile = "default"
+    if STATE.selected_profile not in STATE.profiles:
+        STATE.selected_profile = next(iter(STATE.profiles))
+    sync_selected_profile()
+
+
+def sync_selected_profile() -> None:
+    ensure_profiles_base()
+    STATE.profiles[STATE.selected_profile] = _profile_payload()
+
+
+def ensure_profiles_base() -> None:
+    if STATE.profiles is None:
+        STATE.profiles = {}
+    if not STATE.selected_profile.strip():
+        STATE.selected_profile = "default"
+
+
+def save_profile(name: str) -> str:
+    normalized = name.strip() or "default"
+    ensure_profiles_base()
+    STATE.selected_profile = normalized
+    STATE.profiles[normalized] = _profile_payload()
+    return normalized
+
+
+def load_profile(name: str, normalize_path) -> str:
+    ensure_profiles()
+    normalized = name.strip()
+    if normalized not in STATE.profiles:
+        raise KeyError(normalized)
+    profile = STATE.profiles[normalized]
+    STATE.selected_profile = normalized
+    STATE.server_dir = normalize_path(profile.get("server_dir", str(DEFAULT_SERVER_DIR)))
+    STATE.server_name = profile.get("server_name", "servertest").strip() or "servertest"
+    STATE.launch_command = profile.get("launch_command", DEFAULT_LAUNCH_COMMAND)
+    STATE.launch_workdir = normalize_path(profile.get("launch_workdir", str(DEFAULT_LAUNCH_DIR)))
+    sync_selected_profile()
+    return normalized
+
+
+def delete_profile(name: str, normalize_path) -> str:
+    ensure_profiles()
+    normalized = name.strip()
+    if normalized not in STATE.profiles:
+        raise KeyError(normalized)
+    if len(STATE.profiles) <= 1:
+        raise ValueError("last-profile")
+    del STATE.profiles[normalized]
+    if STATE.selected_profile == normalized:
+        next_name = next(iter(STATE.profiles))
+        load_profile(next_name, normalize_path)
+        return next_name
+    return STATE.selected_profile
 
 
 def get_mod_display_names() -> list[str]:
@@ -41,27 +115,48 @@ def set_mod_display_names(names: list[str]) -> None:
 
 def load_state(normalize_path) -> None:
     if not STATE_FILE.exists():
+        ensure_profiles()
         return
     data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    STATE.selected_profile = data.get("selected_profile", "default").strip() or "default"
     STATE.server_dir = normalize_path(data.get("server_dir", str(DEFAULT_SERVER_DIR)))
     STATE.server_name = data.get("server_name", "servertest").strip() or "servertest"
     STATE.launch_command = data.get("launch_command", DEFAULT_LAUNCH_COMMAND)
     STATE.launch_workdir = normalize_path(data.get("launch_workdir", str(DEFAULT_LAUNCH_DIR)))
     server_pid = data.get("server_pid")
     STATE.server_pid = server_pid if isinstance(server_pid, int) else None
+    raw_profiles = data.get("profiles", {})
+    profiles = raw_profiles if isinstance(raw_profiles, dict) else {}
+    STATE.profiles = {
+        str(name): {
+            "server_dir": str(profile.get("server_dir", str(DEFAULT_SERVER_DIR))),
+            "server_name": str(profile.get("server_name", "servertest")),
+            "launch_command": str(profile.get("launch_command", DEFAULT_LAUNCH_COMMAND)),
+            "launch_workdir": str(profile.get("launch_workdir", str(DEFAULT_LAUNCH_DIR))),
+        }
+        for name, profile in profiles.items()
+        if isinstance(profile, dict)
+    }
     mod_display_names = data.get("mod_display_names", {})
     STATE.mod_display_names = mod_display_names if isinstance(mod_display_names, dict) else {}
+    if STATE.profiles:
+        load_profile(STATE.selected_profile, normalize_path)
+    else:
+        ensure_profiles()
 
 
 def save_state() -> None:
+    sync_selected_profile()
     STATE_FILE.write_text(
         json.dumps(
             {
+                "selected_profile": STATE.selected_profile,
                 "server_dir": str(STATE.server_dir),
                 "server_name": STATE.server_name,
                 "launch_command": STATE.launch_command,
                 "launch_workdir": str(STATE.launch_workdir),
                 "server_pid": STATE.server_pid,
+                "profiles": STATE.profiles or {},
                 "mod_display_names": STATE.mod_display_names or {},
             },
             indent=2,
