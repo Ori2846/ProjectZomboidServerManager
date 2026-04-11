@@ -75,7 +75,6 @@ function App() {
   const [launchForm, setLaunchForm] = useState({ launchCommand: '', launchWorkdir: '' })
   const [commonValues, setCommonValues] = useState({})
   const [modRows, setModRows] = useState([])
-  const [sandboxValues, setSandboxValues] = useState({})
   const [sandboxRaw, setSandboxRaw] = useState('')
   const [advancedValues, setAdvancedValues] = useState({})
   const [selectedAdvancedFile, setSelectedAdvancedFile] = useState('')
@@ -115,7 +114,6 @@ function App() {
     setLaunchForm({ launchCommand: page.launchCommand, launchWorkdir: page.launchWorkdir })
     setCommonValues(Object.fromEntries(page.commonSettings.map((field) => [field.key, field.value])))
     setModRows(page.mods.rows.length ? page.mods.rows : [{ mod: '', displayName: '', workshopId: '' }])
-    setSandboxValues(Object.fromEntries(page.sandbox.fields.filter((field) => field.valueType !== 'section').map((field) => [field.path, field.value])))
     setSandboxRaw(page.sandbox.rawText)
     setAdvancedValues(Object.fromEntries(page.advancedFiles.map((file) => [file.label, file.content])))
     setSelectedAdvancedFile((current) => (page.advancedFiles.some((file) => file.label === current) ? current : page.advancedFiles[0]?.label ?? ''))
@@ -310,8 +308,6 @@ function App() {
             setCommonValues={setCommonValues}
             modRows={modRows}
             setModRows={setModRows}
-            sandboxValues={sandboxValues}
-            setSandboxValues={setSandboxValues}
             sandboxRaw={sandboxRaw}
             setSandboxRaw={setSandboxRaw}
             advancedValues={advancedValues}
