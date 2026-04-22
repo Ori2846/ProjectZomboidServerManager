@@ -5,16 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="076a296a-d1c9-4bfe-bff4-83bdcae908ad" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pz_manager/files.py" beforeDir="false" afterPath="$PROJECT_DIR$/pz_manager/files.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pz_manager/http.py" beforeDir="false" afterPath="$PROJECT_DIR$/pz_manager/http.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pz_manager/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/pz_manager/config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pz_manager/logs.py" beforeDir="false" afterPath="$PROJECT_DIR$/pz_manager/logs.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/pz_manager/state.py" beforeDir="false" afterPath="$PROJECT_DIR$/pz_manager/state.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pz_manager/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/pz_manager/views.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/site/my-app/src/App.css" beforeDir="false" afterPath="$PROJECT_DIR$/site/my-app/src/App.css" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/site/my-app/src/App.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/site/my-app/src/App.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/site/my-app/src/components/MainPanels.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/site/my-app/src/components/MainPanels.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/site/my-app/src/components/UiBits.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/site/my-app/src/components/UiBits.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/site/my-app/src/index.css" beforeDir="false" afterPath="$PROJECT_DIR$/site/my-app/src/index.css" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -42,14 +36,14 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Python.main.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;reactUI&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Python.main.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "fix/runtime-storage-paths"
   }
-}</component>
+}]]></component>
   <component name="RunManager">
     <configuration name="main" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="ProjectZomboidServerManager" />

@@ -67,6 +67,14 @@ The site includes a live console panel that polls the manager and shows stdout/s
 - Logs appear when the server was started from this manager
 - Existing servers started outside the manager do not have historical console output available here
 
+Runtime files are stored in:
+
+```text
+%LOCALAPPDATA%\ProjectZomboidServerManager
+```
+
+That includes the manager state file and the persistent log file, so the app does not depend on the shell's current working directory.
+
 ## Notes
 
 - The first save will create missing files.

@@ -5,7 +5,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from .config import DEFAULT_LAUNCH_COMMAND, DEFAULT_LAUNCH_DIR, DEFAULT_SERVER_DIR, STATE_FILE
+from .config import APP_STORAGE_DIR, DEFAULT_LAUNCH_COMMAND, DEFAULT_LAUNCH_DIR, DEFAULT_SERVER_DIR, LEGACY_STATE_FILE, STATE_FILE
 
 
 @dataclass
@@ -114,10 +114,11 @@ def set_mod_display_names(names: list[str]) -> None:
 
 
 def load_state(normalize_path) -> None:
-    if not STATE_FILE.exists():
+    state_path = STATE_FILE if STATE_FILE.exists() else LEGACY_STATE_FILE
+    if not state_path.exists():
         ensure_profiles()
         return
-    data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    data = json.loads(state_path.read_text(encoding="utf-8"))
     STATE.selected_profile = data.get("selected_profile", "default").strip() or "default"
     STATE.server_dir = normalize_path(data.get("server_dir", str(DEFAULT_SERVER_DIR)))
     STATE.server_name = data.get("server_name", "servertest").strip() or "servertest"
@@ -147,6 +148,7 @@ def load_state(normalize_path) -> None:
 
 def save_state() -> None:
     sync_selected_profile()
+    APP_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
     STATE_FILE.write_text(
         json.dumps(
             {
