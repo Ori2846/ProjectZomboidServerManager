@@ -118,7 +118,25 @@ def load_state(normalize_path) -> None:
     if not state_path.exists():
         ensure_profiles()
         return
-    data = json.loads(state_path.read_text(encoding="utf-8"))
+    try:
+        raw_state = state_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        ensure_profiles()
+        STATE.status_message = f"Could not read state file: {state_path}"
+        STATE.status_level = "warning"
+        return
+    if not raw_state:
+        ensure_profiles()
+        STATE.status_message = f"State file was empty, defaults loaded from {state_path}"
+        STATE.status_level = "warning"
+        return
+    try:
+        data = json.loads(raw_state)
+    except json.JSONDecodeError:
+        ensure_profiles()
+        STATE.status_message = f"State file was invalid JSON, defaults loaded from {state_path}"
+        STATE.status_level = "warning"
+        return
     STATE.selected_profile = data.get("selected_profile", "default").strip() or "default"
     STATE.server_dir = normalize_path(data.get("server_dir", str(DEFAULT_SERVER_DIR)))
     STATE.server_name = data.get("server_name", "servertest").strip() or "servertest"
