@@ -116,6 +116,10 @@ def load_advanced_contents(server_dir: Path, server_name: str) -> dict[str, str]
     }
 
 
+def multiplayer_save_path(server_name: str, saves_dir: Path = DEFAULT_SAVES_DIR) -> Path:
+    return saves_dir / "Multiplayer" / server_name.strip()
+
+
 def reset_saves_directory(saves_dir: Path = DEFAULT_SAVES_DIR) -> tuple[bool, str]:
     if not saves_dir.exists():
         return False, f"Saves folder not found: {saves_dir}"

@@ -44,8 +44,9 @@ def start_server() -> tuple[bool, str]:
     if not STATE.launch_workdir.exists():
         return False, "Launch working directory does not exist."
 
+    launch_command = build_launch_command()
     process = subprocess.Popen(
-        STATE.launch_command,
+        launch_command,
         cwd=str(STATE.launch_workdir),
         shell=True,
         stdin=subprocess.PIPE,
@@ -56,10 +57,23 @@ def start_server() -> tuple[bool, str]:
     )
     STATE.server_process = process
     STATE.server_pid = process.pid
-    append_log_line(f"=== Starting server PID {process.pid} ===")
+    append_log_line(f"=== Starting server PID {process.pid}: {launch_command} ===")
     threading.Thread(target=stream_process_output, args=(process,), daemon=True).start()
     save_state()
     return True, f"Started server on PID {process.pid}"
+
+
+def build_launch_command() -> str:
+    command = STATE.launch_command.strip()
+    if not command:
+        return command
+    # Default the launched server profile to the one selected in the UI unless the user already set it.
+    if re.search(r"(^|\s)-servername(\s|$)", command, flags=re.IGNORECASE):
+        return command
+    server_name = STATE.server_name.strip()
+    if not server_name:
+        return command
+    return f'{command} -servername "{server_name}"'
 
 
 def send_server_command(command: str) -> tuple[bool, str]:

@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 from .config import ADVANCED_FILES, DEFAULT_SAVES_DIR
-from .files import advanced_path, ini_path, load_advanced_contents, parse_ini_file
+from .files import advanced_path, ini_path, load_advanced_contents, multiplayer_save_path, parse_ini_file
 from .logs import current_logs
 from .network import get_access_url
 from .processes import get_server_version_details, is_server_running
@@ -108,8 +108,11 @@ def build_page_data() -> dict[str, object]:
         )
 
     user_directory = load_user_directory(server_name)
+    profile_save_dir = multiplayer_save_path(server_name, DEFAULT_SAVES_DIR)
 
     return {
+        "selectedProfile": STATE.selected_profile,
+        "profiles": sorted((STATE.profiles or {}).keys()),
         "serverDir": str(server_dir),
         "serverName": server_name,
         "running": running,
@@ -126,7 +129,7 @@ def build_page_data() -> dict[str, object]:
         "paths": {
             "ini": str(ini_path(server_dir, server_name)),
             "sandbox": str(sandbox_path),
-            "saves": str(DEFAULT_SAVES_DIR),
+            "saves": str(profile_save_dir),
         },
         "commonSettings": common_fields,
         "mods": {
