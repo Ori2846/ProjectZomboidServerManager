@@ -4,7 +4,7 @@ import html
 import re
 from pathlib import Path
 
-from .config import ADVANCED_FILES, DEFAULT_SAVES_DIR
+from .config import ADVANCED_FILES, DEFAULT_SAVES_DIR, FRONTEND_DIST_DIR
 from .files import advanced_path, ini_path, load_advanced_contents, multiplayer_save_path, parse_ini_file
 from .logs import current_logs
 from .network import get_access_url
@@ -186,8 +186,7 @@ def build_page_data() -> dict[str, object]:
 
 
 def render_app_shell() -> str:
-    dist_dir = Path("site/my-app/dist")
-    index_file = dist_dir / "index.html"
+    index_file = FRONTEND_DIST_DIR / "index.html"
     if not index_file.exists():
         return """<!doctype html>
 <html lang="en">

@@ -1,6 +1,8 @@
 from pathlib import Path
 
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+FRONTEND_DIST_DIR = PROJECT_ROOT / "site" / "my-app" / "dist"
 DEFAULT_SERVER_DIR = Path.home() / "Zomboid" / "Server"
 DEFAULT_ZOMBOID_DIR = Path.home() / "Zomboid"
 DEFAULT_SAVES_DIR = DEFAULT_ZOMBOID_DIR / "Saves"

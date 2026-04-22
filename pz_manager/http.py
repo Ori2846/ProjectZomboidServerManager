@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from .config import ADVANCED_FILES, DEFAULT_SAVES_DIR, DEFAULT_SERVER_DIR
+from .config import ADVANCED_FILES, DEFAULT_SAVES_DIR, DEFAULT_SERVER_DIR, FRONTEND_DIST_DIR
 from .files import advanced_path, ini_path, multiplayer_save_path, normalize_server_dir, parse_ini_file, reset_saves_directory, write_ini_file
 from .logs import clear_log_history, current_logs
 from .processes import command_channel_available, is_server_running, launch_server_update, send_server_command, start_server, stop_server
@@ -375,7 +375,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(encoded)
 
     def serve_frontend_asset(self, request_path: str) -> bool:
-        dist_dir = Path("site/my-app/dist")
+        dist_dir = FRONTEND_DIST_DIR
         if not dist_dir.exists():
             return False
         relative = request_path.lstrip("/")
