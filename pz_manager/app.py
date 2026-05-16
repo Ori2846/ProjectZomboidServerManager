@@ -4,6 +4,7 @@ from http.server import ThreadingHTTPServer
 
 from .config import DEFAULT_SERVER_DIR, HOST, PORT
 from .files import normalize_server_dir
+from .frontend import ensure_frontend_assets
 from .http import RequestHandler
 from .logs import load_log_history
 from .network import get_access_url
@@ -12,6 +13,7 @@ from .state import load_state
 
 
 def run() -> None:
+    ensure_frontend_assets()
     load_state(normalize_server_dir)
     load_log_history()
     start_auto_update_checker()

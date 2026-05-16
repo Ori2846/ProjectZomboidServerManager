@@ -3,7 +3,8 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-FRONTEND_DIST_DIR = PROJECT_ROOT / "site" / "my-app" / "dist"
+FRONTEND_APP_DIR = PROJECT_ROOT / "site" / "my-app"
+FRONTEND_DIST_DIR = FRONTEND_APP_DIR / "dist"
 APP_STORAGE_DIR = Path(os.getenv("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "ProjectZomboidServerManager"
 DEFAULT_SERVER_DIR = Path.home() / "Zomboid" / "Server"
 DEFAULT_ZOMBOID_DIR = Path.home() / "Zomboid"
