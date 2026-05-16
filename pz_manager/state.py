@@ -17,6 +17,14 @@ class AppState:
     launch_workdir: Path = DEFAULT_LAUNCH_DIR
     server_pid: int | None = None
     server_process: subprocess.Popen[str] | None = None
+    update_process: subprocess.Popen[str] | None = None
+    update_active: bool = False
+    update_progress: int = 0
+    update_message: str = "Idle"
+    auto_update_check_enabled: bool = False
+    update_available: bool = False
+    latest_build_id: str = ""
+    last_update_check_message: str = "Auto-check is off"
     profiles: dict[str, dict[str, str]] | None = None
     mod_display_names: dict[str, list[str]] | None = None
     status_message: str = ""
@@ -142,6 +150,10 @@ def load_state(normalize_path) -> None:
     STATE.server_name = data.get("server_name", "servertest").strip() or "servertest"
     STATE.launch_command = data.get("launch_command", DEFAULT_LAUNCH_COMMAND)
     STATE.launch_workdir = normalize_path(data.get("launch_workdir", str(DEFAULT_LAUNCH_DIR)))
+    STATE.auto_update_check_enabled = bool(data.get("auto_update_check_enabled", False))
+    STATE.latest_build_id = str(data.get("latest_build_id", ""))
+    STATE.update_available = bool(data.get("update_available", False))
+    STATE.last_update_check_message = str(data.get("last_update_check_message", "Auto-check is off"))
     server_pid = data.get("server_pid")
     STATE.server_pid = server_pid if isinstance(server_pid, int) else None
     raw_profiles = data.get("profiles", {})
@@ -175,6 +187,10 @@ def save_state() -> None:
                 "server_name": STATE.server_name,
                 "launch_command": STATE.launch_command,
                 "launch_workdir": str(STATE.launch_workdir),
+                "auto_update_check_enabled": STATE.auto_update_check_enabled,
+                "latest_build_id": STATE.latest_build_id,
+                "update_available": STATE.update_available,
+                "last_update_check_message": STATE.last_update_check_message,
                 "server_pid": STATE.server_pid,
                 "profiles": STATE.profiles or {},
                 "mod_display_names": STATE.mod_display_names or {},

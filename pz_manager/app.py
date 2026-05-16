@@ -7,12 +7,14 @@ from .files import normalize_server_dir
 from .http import RequestHandler
 from .logs import load_log_history
 from .network import get_access_url
+from .processes import start_auto_update_checker
 from .state import load_state
 
 
 def run() -> None:
     load_state(normalize_server_dir)
     load_log_history()
+    start_auto_update_checker()
     server = ThreadingHTTPServer((HOST, PORT), RequestHandler)
     print(f"PZ Server Manager listening on {HOST}:{PORT}")
     print(f"Local network URL: {get_access_url()}")

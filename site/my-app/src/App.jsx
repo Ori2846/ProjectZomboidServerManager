@@ -2,7 +2,7 @@ import { startTransition, useEffect, useEffectEvent, useState } from 'react'
 import { MainPanels } from './components/MainPanels.jsx'
 import './App.css'
 
-export const PANEL_KEYS = [
+const PANEL_KEYS = [
   'server-target',
   'server-process',
   'live-console',
@@ -14,7 +14,7 @@ export const PANEL_KEYS = [
   'maintenance',
 ]
 
-export const PANEL_LABELS = {
+const PANEL_LABELS = {
   'server-target': 'Target',
   'server-process': 'Process',
   'live-console': 'Console',
@@ -26,7 +26,21 @@ export const PANEL_LABELS = {
   maintenance: 'Danger',
 }
 
-export function toFormBody(entries) {
+const PANEL_DETAILS = {
+  'server-target': { group: 'Setup', description: 'Choose the install folder, server name, and saved profile.' },
+  'server-process': { group: 'Runtime', description: 'Save launch settings and control the dedicated server process.' },
+  'live-console': { group: 'Runtime', description: 'Send commands and monitor live server output.' },
+  'common-settings': { group: 'Configuration', description: 'Edit the common server `.ini` settings.' },
+  'mods-workshop': { group: 'Configuration', description: 'Pair manager labels, mod IDs, and Steam Workshop IDs.' },
+  'players-admin': { group: 'Administration', description: 'Review users, assign roles, and trigger player events.' },
+  sandboxvars: { group: 'Files', description: 'Edit the raw SandboxVars Lua configuration.' },
+  'advanced-files': { group: 'Files', description: 'Work directly with advanced raw server files.' },
+  maintenance: { group: 'Maintenance', description: 'Run destructive maintenance actions with confirmation.' },
+}
+
+const PANEL_GROUPS = ['Setup', 'Runtime', 'Configuration', 'Administration', 'Files', 'Maintenance']
+
+function toFormBody(entries) {
   const body = new URLSearchParams()
   entries.forEach(([key, value]) => {
     if (Array.isArray(value)) {
@@ -50,8 +64,10 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [busyAction, setBusyAction] = useState('')
   const [liveLogs, setLiveLogs] = useState([])
+  const [steamcmdLogs, setSteamcmdLogs] = useState([])
   const [liveRunning, setLiveRunning] = useState(false)
   const [liveServerPid, setLiveServerPid] = useState(null)
+  const [updateState, setUpdateState] = useState({ running: false, progress: 0, message: 'Idle', steamcmdPath: '' })
   const [consoleCommand, setConsoleCommand] = useState('')
   const [resetConfirmation, setResetConfirmation] = useState('')
   const [selectedUser, setSelectedUser] = useState('')
@@ -74,8 +90,10 @@ function App() {
     startTransition(() => {
       setPage(nextPage)
       setLiveLogs(nextPage.logs || [])
+      setSteamcmdLogs(nextPage.steamcmdLogs || [])
       setLiveRunning(Boolean(nextPage.running))
       setLiveServerPid(nextPage.serverPid ?? null)
+      setUpdateState(nextPage.update || { running: false, progress: 0, message: 'Idle', steamcmdPath: '' })
       setClientStatus(null)
     })
   }
@@ -96,7 +114,7 @@ function App() {
     setProfileSelection(page.selectedProfile)
     setProfileNameInput(page.selectedProfile)
     setTargetForm({ serverDir: page.serverDir, serverName: page.serverName })
-    setLaunchForm({ launchCommand: page.launchCommand, launchWorkdir: page.launchWorkdir })
+    setLaunchForm({ launchWorkdir: page.launchWorkdir })
     setCommonValues(Object.fromEntries(page.commonSettings.map((field) => [field.key, field.value])))
     setModRows(page.mods.rows.length ? page.mods.rows : [{ mod: '', displayName: '', workshopId: '' }])
     setSandboxRaw(page.sandbox.rawText)
@@ -117,16 +135,22 @@ function App() {
     if (!response.ok) return
     const payload = await response.json()
     setLiveLogs(payload.lines || [])
+    setSteamcmdLogs(payload.steamcmdLines || [])
     setLiveRunning(Boolean(payload.running))
     setLiveServerPid(payload.pid ?? null)
+    setUpdateState(payload.update || { running: false, progress: 0, message: 'Idle', steamcmdPath: '' })
   })
 
+  const pageLoaded = Boolean(page)
+  const serverDir = page?.serverDir
+  const serverName = page?.serverName
+
   useEffect(() => {
-    if (!page) return undefined
+    if (!pageLoaded) return undefined
     pollLogs()
     const timer = window.setInterval(() => pollLogs().catch(() => {}), 1500)
     return () => window.clearInterval(timer)
-  }, [page?.serverDir, page?.serverName, pollLogs])
+  }, [pageLoaded, serverDir, serverName])
 
   const submitForm = async (path, entries, actionLabel) => {
     setBusyAction(actionLabel)
@@ -150,13 +174,10 @@ function App() {
   if (loading) return <main className="shell loading-shell">Loading server manager...</main>
   if (!page) return <main className="shell loading-shell">Unable to load the server manager.</main>
 
+  const activePanel = PANEL_DETAILS[activeSection]
+
   return (
     <main className="shell">
-      <section className="version-strip">
-        <span>Server Version</span>
-        <strong>{page.serverVersion?.display || 'Unavailable'}</strong>
-      </section>
-
       <header className="topbar">
         <div className="brand-block">
           <p className="brand-kicker">Project Zomboid</p>
@@ -170,29 +191,49 @@ function App() {
             </div>
           </div>
         </div>
+        <div className="topbar-meta" aria-label="Server overview">
+          <div className="topbar-stat">
+            <span>Version</span>
+            <strong>{page.serverVersion?.display || 'Unavailable'}</strong>
+          </div>
+          <div className="topbar-stat">
+            <span>Profile</span>
+            <strong>{page.selectedProfile}</strong>
+          </div>
+          <div className="topbar-stat">
+            <span>Users</span>
+            <strong>{page.users.users.length}</strong>
+          </div>
+        </div>
       </header>
 
       <div className="app-frame">
         <aside className="sidebar">
           <div className="sidebar-block">
-            <p className="sidebar-label">Workspace</p>
+            <p className="sidebar-label">Current Server</p>
             <strong>{page.serverName}</strong>
             <span>{page.serverDir}</span>
-            <span>Profile: {page.selectedProfile}</span>
           </div>
 
           <nav className="sidebar-nav" aria-label="Sections">
             <p className="sidebar-label">Sections</p>
             <div className="sidebar-nav-list">
-              {PANEL_KEYS.map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`sidebar-nav-item ${activeSection === key ? 'active' : ''}`}
-                  onClick={() => setActiveSection(key)}
-                >
-                  {PANEL_LABELS[key]}
-                </button>
+              {PANEL_GROUPS.map((group) => (
+                <div key={group} className="nav-group">
+                  <span>{group}</span>
+                  {PANEL_KEYS.filter((key) => PANEL_DETAILS[key].group === group).map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`sidebar-nav-item ${activeSection === key ? 'active' : ''}`}
+                      aria-current={activeSection === key ? 'page' : undefined}
+                      onClick={() => setActiveSection(key)}
+                    >
+                      <strong>{PANEL_LABELS[key]}</strong>
+                      <small>{PANEL_DETAILS[key].description}</small>
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
           </nav>
@@ -215,6 +256,14 @@ function App() {
         </aside>
 
         <section className="workspace">
+          <div className="workspace-head">
+            <div>
+              <span>{activePanel.group}</span>
+              <h2>{PANEL_LABELS[activeSection]}</h2>
+              <p>{activePanel.description}</p>
+            </div>
+          </div>
+
           {(clientStatus || page.status)?.message ? (
             <div className={`status-banner ${statusTone((clientStatus || page.status).level)}`}>{(clientStatus || page.status).message}</div>
           ) : null}
@@ -222,8 +271,10 @@ function App() {
           <MainPanels
             page={page}
             liveLogs={liveLogs}
+            steamcmdLogs={steamcmdLogs}
             liveRunning={liveRunning}
             liveServerPid={liveServerPid}
+            updateState={updateState}
             activeSection={activeSection}
             busyAction={busyAction}
             submitForm={submitForm}

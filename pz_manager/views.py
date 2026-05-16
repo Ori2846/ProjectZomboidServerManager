@@ -6,9 +6,9 @@ from pathlib import Path
 
 from .config import ADVANCED_FILES, DEFAULT_SAVES_DIR, FRONTEND_DIST_DIR
 from .files import advanced_path, ini_path, load_advanced_contents, multiplayer_save_path, parse_ini_file
-from .logs import current_logs
+from .logs import current_logs, current_steamcmd_logs
 from .network import get_access_url
-from .processes import get_server_version_details, is_server_running
+from .processes import get_server_version_details, inferred_launch_script, is_server_running, update_status
 from .sandbox_vars import flatten_sandbox_fields, load_sandbox_document_safe
 from .state import STATE, get_mod_display_names
 from .users import load_user_directory
@@ -125,7 +125,10 @@ def build_page_data() -> dict[str, object]:
         "accessUrl": get_access_url(),
         "launchCommand": STATE.launch_command,
         "launchWorkdir": str(STATE.launch_workdir),
+        "inferredLaunchCommand": str(inferred_launch_script()),
+        "update": update_status(),
         "logs": current_logs(),
+        "steamcmdLogs": current_steamcmd_logs(),
         "paths": {
             "ini": str(ini_path(server_dir, server_name)),
             "sandbox": str(sandbox_path),

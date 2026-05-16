@@ -5,8 +5,10 @@ export function MainPanels(props) {
   const {
     page,
     liveLogs,
+    steamcmdLogs,
     liveRunning,
     liveServerPid,
+    updateState,
     activeSection,
     busyAction,
     submitForm,
@@ -51,7 +53,7 @@ export function MainPanels(props) {
     case 'server-target':
       return <ServerTargetPanel page={page} busyAction={busyAction} submitForm={submitForm} profileSelection={profileSelection} setProfileSelection={setProfileSelection} profileNameInput={profileNameInput} setProfileNameInput={setProfileNameInput} targetForm={targetForm} setTargetForm={setTargetForm} />
     case 'server-process':
-      return <ServerProcessPanel page={page} liveRunning={liveRunning} liveServerPid={liveServerPid} busyAction={busyAction} submitForm={submitForm} launchForm={launchForm} setLaunchForm={setLaunchForm} />
+      return <ServerProcessPanel page={page} steamcmdLogs={steamcmdLogs} liveRunning={liveRunning} liveServerPid={liveServerPid} updateState={updateState} busyAction={busyAction} submitForm={submitForm} launchForm={launchForm} setLaunchForm={setLaunchForm} />
     case 'live-console':
       return <LiveConsolePanel liveLogs={liveLogs} busyAction={busyAction} submitForm={submitForm} consoleCommand={consoleCommand} setConsoleCommand={setConsoleCommand} />
     case 'common-settings':
@@ -98,20 +100,43 @@ function ServerTargetPanel({ page, busyAction, submitForm, profileSelection, set
   )
 }
 
-function ServerProcessPanel({ page, liveRunning, liveServerPid, busyAction, submitForm, launchForm, setLaunchForm }) {
+function ServerProcessPanel({ page, steamcmdLogs, liveRunning, liveServerPid, updateState, busyAction, submitForm, launchForm, setLaunchForm }) {
+  const nextAutoCheckState = !updateState.autoCheckEnabled
+
   return (
     <Panel title="Server Process" subtitle="Launch and control the dedicated server from the manager." badge={<span className={`pill ${liveRunning ? 'success' : 'warning'}`}>{liveRunning ? 'Running' : 'Stopped'}{liveRunning && liveServerPid ? ` | PID ${liveServerPid}` : ''}</span>} panelKey="server-process">
-      <form className="form-grid" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-launch', [['launch_command', launchForm.launchCommand], ['launch_workdir', launchForm.launchWorkdir]], 'save-launch') }}>
+      <form className="form-grid" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-launch', [['launch_workdir', launchForm.launchWorkdir]], 'save-launch') }}>
         <div className="button-row top-actions">
-          <button type="submit" disabled={busyAction === 'save-launch'}>Save Launch Settings</button>
-          <button type="button" className="secondary muted-action" disabled title="Update Server is currently out of service.">Update Server</button>
+          <button type="submit" disabled={busyAction === 'save-launch'}>Save Working Directory</button>
+          <button type="button" className="secondary" disabled={busyAction === 'update-server' || liveRunning || updateState.running} onClick={() => submitForm('/api/update-server', [], 'update-server')}>Update Server</button>
+          <button type="button" className="secondary" disabled={busyAction === 'toggle-auto-update-check'} onClick={() => submitForm('/api/toggle-auto-update-check', [['enabled', String(nextAutoCheckState)]], 'toggle-auto-update-check')}>{updateState.autoCheckEnabled ? 'Disable Update Check' : 'Enable Update Check'}</button>
           <button type="button" className="secondary" disabled={busyAction === 'start-server'} onClick={() => submitForm('/api/start-server', [], 'start-server')}>Start Server</button>
           <button type="button" className="secondary" disabled={busyAction === 'stop-server'} onClick={() => submitForm('/api/stop-server', [], 'stop-server')}>Stop Server</button>
         </div>
-        <p className="field-help">Update Server is currently out of service.</p>
-        <p className="field-help">SteamCMD path: {page.serverVersion?.steamcmdPath || 'Not found from the current install metadata.'}</p>
-        <Field label="Launch Command"><input value={launchForm.launchCommand} onChange={(event) => setLaunchForm((current) => ({ ...current, launchCommand: event.target.value }))} placeholder="StartServer64.bat -servername servertest" /></Field>
+        {updateState.autoCheckEnabled ? (
+          <div className={`update-notice ${updateState.updateAvailable ? 'warning' : 'info'}`}>
+            <strong>{updateState.updateAvailable ? 'Update available' : 'Update check enabled'}</strong>
+            <span>{updateState.checkMessage}</span>
+          </div>
+        ) : null}
+        <div className="update-progress-card">
+          <div className="progress-copy">
+            <strong>{updateState.message || 'SteamCMD idle'}</strong>
+            <span>SteamCMD: {updateState.steamcmdPath || page.serverVersion?.steamcmdPath || 'Will be installed inside this project when needed.'}</span>
+          </div>
+          <div className="progress-track" aria-label="SteamCMD update progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={updateState.progress || 0} role="progressbar">
+            <span style={{ width: `${Math.max(0, Math.min(100, updateState.progress || 0))}%` }} />
+          </div>
+        </div>
+        <p className="field-help">Launch command is inferred as {page.inferredLaunchCommand || 'StartServer64.bat inside the launch working directory'}.</p>
         <Field label="Launch Working Directory"><input value={launchForm.launchWorkdir} onChange={(event) => setLaunchForm((current) => ({ ...current, launchWorkdir: event.target.value }))} /></Field>
+        <div className="process-console-block">
+          <div className="advanced-editor-head">
+            <strong>SteamCMD Console</strong>
+            <span>Only SteamCMD install, update, and update-check output appears here.</span>
+          </div>
+          <pre className="log-console compact-console">{steamcmdLogs.join('\n')}</pre>
+        </div>
       </form>
     </Panel>
   )

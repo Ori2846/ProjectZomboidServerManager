@@ -10,8 +10,8 @@ from urllib.parse import parse_qs, urlparse
 
 from .config import ADVANCED_FILES, DEFAULT_SAVES_DIR, DEFAULT_SERVER_DIR, FRONTEND_DIST_DIR
 from .files import advanced_path, ini_path, multiplayer_save_path, normalize_server_dir, parse_ini_file, reset_saves_directory, write_ini_file
-from .logs import clear_log_history, current_logs
-from .processes import command_channel_available, is_server_running, launch_server_update, send_server_command, start_server, stop_server
+from .logs import clear_log_history, current_logs, current_steamcmd_logs
+from .processes import command_channel_available, is_server_running, launch_server_update, send_server_command, set_auto_update_check_enabled, start_server, stop_server, update_status
 from .sandbox_vars import coerce_sandbox_value, load_sandbox_vars, save_sandbox_vars, update_sandbox_value
 from .state import STATE, delete_profile, load_profile, save_profile, save_state, set_mod_display_names, sync_selected_profile
 from .users import set_user_access_level
@@ -28,7 +28,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.respond_json(build_page_data())
             return
         if parsed.path == "/logs":
-            self.respond_json({"lines": current_logs(), "running": is_server_running(), "pid": STATE.server_pid})
+            self.respond_json({"lines": current_logs(), "steamcmdLines": current_steamcmd_logs(), "running": is_server_running(), "pid": STATE.server_pid, "update": update_status()})
             return
         if self.serve_frontend_asset(parsed.path):
             return
@@ -170,12 +170,11 @@ class RequestHandler(BaseHTTPRequestHandler):
             return
 
         if action_path == "/save-launch":
-            STATE.launch_command = form.get("launch_command", [""])[0].strip()
             workdir_value = form.get("launch_workdir", [""])[0] or str(Path.cwd())
             STATE.launch_workdir = normalize_server_dir(workdir_value)
             sync_selected_profile()
             save_state()
-            STATE.status_message = "Saved launch settings"
+            STATE.status_message = "Saved launch working directory"
             STATE.status_level = "success"
             self.respond_action(wants_json)
             return
@@ -189,6 +188,14 @@ class RequestHandler(BaseHTTPRequestHandler):
 
         if action_path == "/update-server":
             ok, message = launch_server_update()
+            STATE.status_message = message
+            STATE.status_level = "success" if ok else "warning"
+            self.respond_action(wants_json)
+            return
+
+        if action_path == "/toggle-auto-update-check":
+            enabled = form.get("enabled", ["false"])[0].strip().lower() == "true"
+            ok, message = set_auto_update_check_enabled(enabled)
             STATE.status_message = message
             STATE.status_level = "success" if ok else "warning"
             self.respond_action(wants_json)
