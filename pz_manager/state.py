@@ -16,6 +16,7 @@ class AppState:
     launch_command: str = DEFAULT_LAUNCH_COMMAND
     launch_workdir: Path = DEFAULT_LAUNCH_DIR
     server_pid: int | None = None
+    server_started_at: float | None = None
     server_process: subprocess.Popen[str] | None = None
     update_process: subprocess.Popen[str] | None = None
     update_active: bool = False
@@ -27,6 +28,7 @@ class AppState:
     last_update_check_message: str = "Auto-check is off"
     profiles: dict[str, dict[str, str]] | None = None
     mod_display_names: dict[str, list[str]] | None = None
+    mod_metadata: dict[str, list[dict[str, object]]] | None = None
     status_message: str = ""
     status_level: str = "info"
 
@@ -34,6 +36,7 @@ class AppState:
 STATE = AppState()
 STATE.profiles = {}
 STATE.mod_display_names = {}
+STATE.mod_metadata = {}
 
 
 def current_server_key() -> str:
@@ -121,6 +124,16 @@ def set_mod_display_names(names: list[str]) -> None:
     STATE.mod_display_names[current_server_key()] = names
 
 
+def get_mod_metadata() -> list[dict[str, object]]:
+    return list((STATE.mod_metadata or {}).get(current_server_key(), []))
+
+
+def set_mod_metadata(rows: list[dict[str, object]]) -> None:
+    if STATE.mod_metadata is None:
+        STATE.mod_metadata = {}
+    STATE.mod_metadata[current_server_key()] = rows
+
+
 def load_state(normalize_path) -> None:
     state_path = STATE_FILE if STATE_FILE.exists() else LEGACY_STATE_FILE
     if not state_path.exists():
@@ -170,6 +183,8 @@ def load_state(normalize_path) -> None:
     }
     mod_display_names = data.get("mod_display_names", {})
     STATE.mod_display_names = mod_display_names if isinstance(mod_display_names, dict) else {}
+    mod_metadata = data.get("mod_metadata", {})
+    STATE.mod_metadata = mod_metadata if isinstance(mod_metadata, dict) else {}
     if STATE.profiles:
         load_profile(STATE.selected_profile, normalize_path)
     else:
@@ -194,6 +209,7 @@ def save_state() -> None:
                 "server_pid": STATE.server_pid,
                 "profiles": STATE.profiles or {},
                 "mod_display_names": STATE.mod_display_names or {},
+                "mod_metadata": STATE.mod_metadata or {},
             },
             indent=2,
         ),

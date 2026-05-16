@@ -123,6 +123,65 @@
   border-color: rgba(255, 188, 92, 0.28);
 }
 
+.server-stats-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.server-stat-card {
+  min-width: 0;
+  padding: 15px 16px;
+  border: 1px solid oklch(58% 0.025 236 / 0.24);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, oklch(32% 0.018 236 / 0.78), oklch(24% 0.018 236 / 0.86)),
+    var(--surface-raised);
+  box-shadow: var(--shadow-sm);
+}
+
+.server-stat-card.primary {
+  border-color: oklch(76% 0.06 222 / 0.34);
+  background:
+    radial-gradient(circle at 20% 0%, oklch(60% 0.06 222 / 0.32), transparent 42%),
+    linear-gradient(180deg, oklch(35% 0.026 222 / 0.86), oklch(25% 0.02 236 / 0.9));
+}
+
+.server-stat-card.healthy {
+  border-color: oklch(77% 0.1 152 / 0.32);
+}
+
+.server-stat-card.warning {
+  border-color: oklch(78% 0.09 78 / 0.34);
+}
+
+.server-stat-card span,
+.server-stat-card small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.server-stat-card span {
+  margin-bottom: 8px;
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+}
+
+.server-stat-card strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 1.05rem;
+}
+
+.server-stat-card small {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
 .app-frame {
   display: grid;
   grid-template-columns: minmax(250px, 300px) minmax(0, 1fr);
@@ -464,7 +523,7 @@
 }
 
 .mods-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(160px, 0.8fr) auto;
+  grid-template-columns: 64px 92px minmax(98px, 0.45fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(150px, 0.7fr) auto;
 }
 
 .table-head {
@@ -487,6 +546,38 @@
   background: var(--surface-raised);
 }
 
+.table-row.dragging {
+  opacity: 0.52;
+}
+
+.table-row.drop-target {
+  border-color: var(--accent-warm);
+  box-shadow: 0 0 0 3px oklch(78% 0.07 78 / 0.14);
+}
+
+.drag-handle {
+  width: 42px;
+  min-height: 42px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 12px;
+  color: var(--text-soft);
+  background: oklch(25% 0.018 236 / 0.72);
+  cursor: grab;
+  touch-action: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-handle span {
+  writing-mode: vertical-rl;
+  letter-spacing: 0.08em;
+  font-weight: 800;
+}
+
 .link-cell a {
   color: var(--accent-cool);
   text-decoration: none;
@@ -504,8 +595,79 @@
   flex-wrap: wrap;
 }
 
+.mod-fetch-message {
+  padding: 12px 14px;
+  border: 1px solid oklch(72% 0.07 222 / 0.28);
+  border-radius: 14px;
+  background: oklch(28% 0.035 222 / 0.58);
+  color: var(--text-soft);
+}
+
+.mod-thumb {
+  width: 76px;
+  height: 58px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  border: 1px solid oklch(58% 0.025 236 / 0.24);
+  border-radius: 12px;
+  background: oklch(20% 0.018 236 / 0.72);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.mod-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mod-id-list {
+  min-height: 86px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+
+.toggle-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-soft);
+}
+
+.toggle-field input {
+  width: auto;
+  accent-color: var(--accent-cool);
+}
+
+.display-name-cell {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid oklch(58% 0.025 236 / 0.2);
+  border-radius: 12px;
+  background: oklch(25% 0.018 236 / 0.36);
+  overflow-wrap: anywhere;
+}
+
 .top-actions {
   margin-bottom: 2px;
+}
+
+.bottom-actions {
+  justify-content: flex-start;
+}
+
+.autosave-state {
+  align-self: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.hidden-file-input {
+  display: none;
 }
 
 .settings-actions {
@@ -851,6 +1013,10 @@ button.slim {
     grid-template-columns: 1fr;
   }
 
+  .server-stats-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .topbar,
   .panel-toggle,
   .panel-meta {
@@ -883,6 +1049,7 @@ button.slim {
   .topbar-meta,
   .sidebar-nav-list,
   .sidebar-block.compact,
+  .server-stats-strip,
   .paired-help {
     grid-template-columns: 1fr;
   }

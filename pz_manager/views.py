@@ -8,9 +8,9 @@ from .config import ADVANCED_FILES, DEFAULT_SAVES_DIR, FRONTEND_DIST_DIR
 from .files import advanced_path, ini_path, load_advanced_contents, multiplayer_save_path, parse_ini_file
 from .logs import current_logs, current_steamcmd_logs
 from .network import get_access_url
-from .processes import get_server_version_details, inferred_launch_script, is_server_running, update_status
+from .processes import get_server_runtime_stats, get_server_version_details, inferred_launch_script, is_server_running, update_status
 from .sandbox_vars import flatten_sandbox_fields, load_sandbox_document_safe
-from .state import STATE, get_mod_display_names
+from .state import STATE, get_mod_display_names, get_mod_metadata
 from .users import load_user_directory
 
 
@@ -23,6 +23,31 @@ def format_comments(comments: list[str]) -> str:
     return "\n".join(line.lstrip("#; ").removeprefix("--").strip() for line in comments if line.strip())
 
 
+def _group_mod_values_for_rows(mod_values: list[str], metadata_rows: list[dict[str, object]], row_count: int) -> list[str]:
+    metadata_has_mod_ids = any(isinstance(row, dict) and isinstance(row.get("modIds"), list) for row in metadata_rows)
+    if metadata_has_mod_ids:
+        grouped = []
+        for index in range(row_count):
+            if index >= len(metadata_rows) or not isinstance(metadata_rows[index], dict):
+                grouped.append("")
+                continue
+            mod_ids = metadata_rows[index].get("modIds")
+            if not isinstance(mod_ids, list):
+                grouped.append("")
+                continue
+            grouped.append("\n".join(str(mod_id).strip().lstrip("\\/") for mod_id in mod_ids if str(mod_id).strip()))
+        return grouped
+
+    if row_count == 1:
+        return ["\n".join(mod_values)]
+
+    grouped = ["" for _ in range(row_count)]
+    for index, mod_value in enumerate(mod_values):
+        target_index = index if index < row_count else row_count - 1
+        grouped[target_index] = f"{grouped[target_index]}\n{mod_value}".strip()
+    return grouped
+
+
 def build_page_data() -> dict[str, object]:
     server_dir = STATE.server_dir
     server_name = STATE.server_name.strip() or "servertest"
@@ -32,6 +57,8 @@ def build_page_data() -> dict[str, object]:
     sandbox_path = advanced_path(server_dir, server_name, "{server}_SandboxVars.lua")
     sandbox_document = load_sandbox_document_safe(sandbox_path)
     version_details = get_server_version_details()
+    server_stats = get_server_runtime_stats()
+    server_stats["accessUrl"] = get_access_url()
     sandbox_fields = (
         flatten_sandbox_fields(sandbox_document.data, sandbox_document.comments)
         if sandbox_document.data and not sandbox_document.parse_error
@@ -45,19 +72,21 @@ def build_page_data() -> dict[str, object]:
     mod_values = [item.strip().lstrip("\\") for item in (mods_field.value if mods_field else "").split(";") if item.strip()]
     workshop_values = [item.strip() for item in (workshop_field.value if workshop_field else "").split(";") if item.strip()]
     display_names = get_mod_display_names()
-    mod_row_count = max(len(workshop_values), len(display_names), 1)
-    grouped_mods = ["" for _ in range(mod_row_count)]
-    for index, mod_value in enumerate(mod_values):
-        target_index = index if index < mod_row_count else mod_row_count - 1
-        grouped_mods[target_index] = f"{grouped_mods[target_index]}, {mod_value}".strip(", ")
+    metadata_rows = get_mod_metadata()
+    mod_row_count = max(len(workshop_values), len(display_names), len(metadata_rows), 1)
+    grouped_mods = _group_mod_values_for_rows(mod_values, metadata_rows, mod_row_count)
     mod_rows = []
     for index in range(mod_row_count):
-        workshop_id = workshop_values[index] if index < len(workshop_values) else ""
+        metadata_row = metadata_rows[index] if index < len(metadata_rows) and isinstance(metadata_rows[index], dict) else {}
+        metadata_workshop_id = str(metadata_row.get("workshopId", ""))
+        workshop_id = metadata_workshop_id or (workshop_values[index] if index < len(workshop_values) else "")
         mod_rows.append(
             {
                 "mod": grouped_mods[index] if index < len(grouped_mods) else "",
                 "displayName": display_names[index] if index < len(display_names) else "",
                 "workshopId": workshop_id,
+                "imageUrl": str(metadata_row.get("imageUrl", "")),
+                "enabled": bool(metadata_row.get("enabled", True)),
                 "workshopUrl": (
                     f"https://steamcommunity.com/sharedfiles/filedetails/?id={html.escape(workshop_id)}"
                     if workshop_id
@@ -117,6 +146,7 @@ def build_page_data() -> dict[str, object]:
         "serverName": server_name,
         "running": running,
         "serverPid": STATE.server_pid,
+        "serverStats": server_stats,
         "serverVersion": version_details,
         "status": {
             "message": STATE.status_message,
@@ -135,6 +165,9 @@ def build_page_data() -> dict[str, object]:
             "saves": str(profile_save_dir),
         },
         "commonSettings": common_fields,
+        "serverConfig": {
+            "rawText": ini_path(server_dir, server_name).read_text(encoding="utf-8") if ini_path(server_dir, server_name).exists() else "",
+        },
         "mods": {
             "available": mods_field is not None or workshop_field is not None,
             "modsHelp": format_comments(mods_field.comments) if mods_field else "",

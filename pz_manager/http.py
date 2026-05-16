@@ -11,11 +11,12 @@ from urllib.parse import parse_qs, urlparse
 from .config import ADVANCED_FILES, DEFAULT_SAVES_DIR, DEFAULT_SERVER_DIR, FRONTEND_DIST_DIR
 from .files import advanced_path, ini_path, multiplayer_save_path, normalize_server_dir, parse_ini_file, reset_saves_directory, write_ini_file
 from .logs import clear_log_history, current_logs, current_steamcmd_logs
-from .processes import command_channel_available, is_server_running, launch_server_update, send_server_command, set_auto_update_check_enabled, start_server, stop_server, update_status
+from .processes import command_channel_available, get_server_runtime_stats, is_server_running, launch_server_update, send_server_command, set_auto_update_check_enabled, start_server, stop_server, update_status
 from .sandbox_vars import coerce_sandbox_value, load_sandbox_vars, save_sandbox_vars, update_sandbox_value
-from .state import STATE, delete_profile, load_profile, save_profile, save_state, set_mod_display_names, sync_selected_profile
+from .state import STATE, delete_profile, load_profile, save_profile, save_state, set_mod_display_names, set_mod_metadata, sync_selected_profile
 from .users import set_user_access_level
 from .views import build_page_data, render_app_shell
+from .workshop import fetch_workshop_mod_details
 
 
 class RequestHandler(BaseHTTPRequestHandler):
@@ -28,7 +29,16 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.respond_json(build_page_data())
             return
         if parsed.path == "/logs":
-            self.respond_json({"lines": current_logs(), "steamcmdLines": current_steamcmd_logs(), "running": is_server_running(), "pid": STATE.server_pid, "update": update_status()})
+            self.respond_json(
+                {
+                    "lines": current_logs(),
+                    "steamcmdLines": current_steamcmd_logs(),
+                    "running": is_server_running(),
+                    "pid": STATE.server_pid,
+                    "serverStats": get_server_runtime_stats(),
+                    "update": update_status(),
+                }
+            )
             return
         if self.serve_frontend_asset(parsed.path):
             return
@@ -114,17 +124,13 @@ class RequestHandler(BaseHTTPRequestHandler):
             server_dir = normalize_server_dir(form.get("server_dir", [""])[0] or str(DEFAULT_SERVER_DIR))
             server_name = form.get("server_name", ["servertest"])[0].strip() or "servertest"
             ini_file = ini_path(server_dir, server_name)
-            ini_document = parse_ini_file(ini_file)
-            for field in ini_document.fields:
-                if field.key in {"Mods", "WorkshopItems"}:
-                    continue
-                field.value = form.get(f"ini__{field.key}", [field.value])[0]
-            write_ini_file(ini_file, ini_document)
+            ini_file.parent.mkdir(parents=True, exist_ok=True)
+            ini_file.write_text(form.get("server_config_raw", [""])[0], encoding="utf-8")
             STATE.server_dir = server_dir
             STATE.server_name = server_name
             sync_selected_profile()
             save_state()
-            STATE.status_message = f"Saved {ini_file.name}"
+            STATE.status_message = f"Saved raw {ini_file.name}"
             STATE.status_level = "success"
             self.respond_action(wants_json)
             return
@@ -139,34 +145,52 @@ class RequestHandler(BaseHTTPRequestHandler):
             mods_values = [item.strip() for item in form.get("ini_pair_mods", [])]
             display_names = [item.strip() for item in form.get("mod_display_name", [])]
             workshop_values = [item.strip() for item in form.get("ini_pair_workshop", [])]
+            image_urls = [item.strip() for item in form.get("mod_image_url", [])]
+            enabled_values = form.get("mod_enabled", [])
             filtered_rows = [
-                (mod_value, display_name, workshop_value)
-                for mod_value, display_name, workshop_value in zip(mods_values, display_names, workshop_values)
+                (mod_value, display_name, workshop_value, image_url, enabled_value)
+                for mod_value, display_name, workshop_value, image_url, enabled_value in zip(mods_values, display_names, workshop_values, image_urls, enabled_values)
                 if mod_value or display_name or workshop_value
             ]
             filtered_mods = []
-            for mod_value, _display_name, _workshop_value in filtered_rows:
-                if not mod_value:
-                    continue
-                filtered_mods.extend(
-                    item.strip()
+            normalized_rows = []
+            for mod_value, display_name, workshop_value, image_url, enabled_value in filtered_rows:
+                row_mod_ids = [
+                    item.strip().lstrip("\\/")
                     for item in re.split(r"[,\n;]+", mod_value)
                     if item.strip()
-                )
-            filtered_workshop = [workshop_value for _mod_value, _display_name, workshop_value in filtered_rows if workshop_value]
-            filtered_names = [display_name for _mod_value, display_name, _workshop_value in filtered_rows]
+                ]
+                normalized_rows.append((row_mod_ids, display_name, workshop_value, image_url, enabled_value))
+                if not mod_value or enabled_value != "true":
+                    continue
+                filtered_mods.extend(row_mod_ids)
+            filtered_workshop = [workshop_value for _mod_ids, _display_name, workshop_value, _image_url, enabled_value in normalized_rows if workshop_value and enabled_value == "true"]
+            filtered_names = [display_name for _mod_ids, display_name, _workshop_value, _image_url, _enabled_value in normalized_rows]
+            filtered_metadata = [
+                {"imageUrl": image_url, "enabled": enabled_value == "true", "modIds": row_mod_ids, "workshopId": workshop_value}
+                for row_mod_ids, _display_name, workshop_value, image_url, enabled_value in normalized_rows
+            ]
             for field in ini_document.fields:
                 if field.key == "Mods":
-                    field.value = ";".join(value.lstrip("\\") for value in filtered_mods)
+                    field.value = ";".join(f"\\{value}" for value in filtered_mods)
                 elif field.key == "WorkshopItems":
                     field.value = ";".join(filtered_workshop)
             write_ini_file(ini_file, ini_document)
             set_mod_display_names(filtered_names)
+            set_mod_metadata(filtered_metadata)
             sync_selected_profile()
             save_state()
-            STATE.status_message = "Saved Mods, WorkshopItems, and manager labels"
+            STATE.status_message = "Saved Mods, WorkshopItems, and display names"
             STATE.status_level = "success"
             self.respond_action(wants_json)
+            return
+
+        if action_path == "/fetch-workshop-mod":
+            workshop_id = form.get("workshop_id", [""])[0]
+            try:
+                self.respond_json({"ok": True, **fetch_workshop_mod_details(workshop_id)})
+            except (OSError, ValueError) as error:
+                self.respond_json({"ok": False, "message": str(error)})
             return
 
         if action_path == "/save-launch":

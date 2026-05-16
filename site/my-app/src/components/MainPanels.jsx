@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
-import { Field, InfoBlock, InfoLine, Panel, SettingCard } from './UiBits.jsx'
+import { useEffect, useRef, useState } from 'react'
+import { Field, InfoBlock, InfoLine, Panel } from './UiBits.jsx'
 
 export function MainPanels(props) {
   const {
@@ -34,8 +34,8 @@ export function MainPanels(props) {
     setTargetForm,
     launchForm,
     setLaunchForm,
-    commonValues,
-    setCommonValues,
+    serverConfigRaw,
+    setServerConfigRaw,
     modRows,
     setModRows,
     sandboxRaw,
@@ -57,7 +57,7 @@ export function MainPanels(props) {
     case 'live-console':
       return <LiveConsolePanel liveLogs={liveLogs} busyAction={busyAction} submitForm={submitForm} consoleCommand={consoleCommand} setConsoleCommand={setConsoleCommand} />
     case 'common-settings':
-      return <CommonSettingsPanel page={page} busyAction={busyAction} submitForm={submitForm} commonValues={commonValues} setCommonValues={setCommonValues} />
+      return <CommonSettingsPanel page={page} busyAction={busyAction} submitForm={submitForm} serverConfigRaw={serverConfigRaw} setServerConfigRaw={setServerConfigRaw} />
     case 'mods-workshop':
       return <ModsWorkshopPanel page={page} busyAction={busyAction} submitForm={submitForm} modRows={modRows} setModRows={setModRows} />
     case 'players-admin':
@@ -165,70 +165,249 @@ function LiveConsolePanel({ liveLogs, busyAction, submitForm, consoleCommand, se
   )
 }
 
-function CommonSettingsPanel({ page, busyAction, submitForm, commonValues, setCommonValues }) {
+function CommonSettingsPanel({ page, busyAction, submitForm, serverConfigRaw, setServerConfigRaw }) {
+  const [autosaveMessage, setAutosaveMessage] = useState('Autosave on')
+  const autosaveReadyRef = useRef(false)
+  const lastAutosavePayloadRef = useRef('')
+  const serverDir = page.serverDir
+  const serverName = page.serverName
+
+  useEffect(() => {
+    autosaveReadyRef.current = false
+    lastAutosavePayloadRef.current = ''
+    setAutosaveMessage('Autosave on')
+  }, [serverDir, serverName])
+
+  useEffect(() => {
+    const entries = buildCommonSaveEntries(serverDir, serverName, serverConfigRaw)
+    const payload = JSON.stringify(entries)
+    if (!autosaveReadyRef.current) {
+      autosaveReadyRef.current = true
+      lastAutosavePayloadRef.current = payload
+      return undefined
+    }
+    if (payload === lastAutosavePayloadRef.current) return undefined
+
+    setAutosaveMessage('Autosaving...')
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch('/api/save-common', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+          body: toFormBody(entries),
+        })
+        if (!response.ok) throw new Error(`Autosave failed (${response.status})`)
+        lastAutosavePayloadRef.current = payload
+        setAutosaveMessage('Autosaved')
+      } catch (error) {
+        setAutosaveMessage(error.message)
+      }
+    }, 900)
+
+    return () => window.clearTimeout(timer)
+  }, [serverConfigRaw, serverDir, serverName])
+
   return (
     <Panel title="Common Settings" subtitle={page.paths.ini} panelKey="common-settings">
-      <div className="jump-bar">
-        <Field label="Jump To Setting">
-          <select onChange={(event) => document.getElementById(event.target.value)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
-            <option value="">Choose a server setting</option>
-            {page.commonSettings.map((field) => <option key={field.id} value={field.id}>{field.key}</option>)}
-          </select>
-        </Field>
-      </div>
-      {page.commonSettings.length ? (
-        <form className="settings-grid" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-common', [['server_dir', page.serverDir], ['server_name', page.serverName], ...page.commonSettings.flatMap((field) => [[`ini__${field.key}`, commonValues[field.key] ?? ''], [`ini_type__${field.key}`, field.valueType]])], 'save-common') }}>
-          <div className="button-row top-actions settings-actions">
-            <button type="submit" disabled={busyAction === 'save-common'}>Save Server Settings</button>
-          </div>
-          {page.commonSettings.map((field) => (
-            <SettingCard key={field.id} id={field.id} label={field.key} help={field.comments}>
-              {field.valueType === 'bool' ? (
-                <select value={commonValues[field.key] ?? 'false'} onChange={(event) => setCommonValues((current) => ({ ...current, [field.key]: event.target.value }))}>
-                  <option value="true">True</option>
-                  <option value="false">False</option>
-                </select>
-              ) : (
-                <input value={commonValues[field.key] ?? ''} onChange={(event) => setCommonValues((current) => ({ ...current, [field.key]: event.target.value }))} />
-              )}
-            </SettingCard>
-          ))}
-        </form>
-      ) : <p className="empty-state">No `.ini` file found yet for this server.</p>}
+      <form className="sandbox-stack" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-common', buildCommonSaveEntries(serverDir, serverName, serverConfigRaw), 'save-common') }}>
+        <div className="button-row top-actions">
+          <button type="submit" disabled={busyAction === 'save-common'}>Save</button>
+          <span className="autosave-state">{autosaveMessage}</span>
+        </div>
+        <RawTextEditor title="Server Config" path={page.paths.ini} value={serverConfigRaw} onChange={setServerConfigRaw} />
+      </form>
     </Panel>
   )
 }
 
 function ModsWorkshopPanel({ page, busyAction, submitForm, modRows, setModRows }) {
+  const [draggedIndex, setDraggedIndex] = useState(null)
+  const [dropIndex, setDropIndex] = useState(null)
+  const [fetchingIndex, setFetchingIndex] = useState(null)
+  const [fetchMessage, setFetchMessage] = useState('')
+  const [autosaveMessage, setAutosaveMessage] = useState('Autosave on')
+  const importInputRef = useRef(null)
+  const autosaveReadyRef = useRef(false)
+  const lastAutosavePayloadRef = useRef('')
+  const modsAvailable = page.mods.available
+  const serverDir = page.serverDir
+  const serverName = page.serverName
+
+  const finishDrag = () => {
+    setDraggedIndex(null)
+    setDropIndex(null)
+  }
+
+  useEffect(() => {
+    if (!modsAvailable) return undefined
+    const entries = buildModSaveEntries(serverDir, serverName, modRows)
+    const payload = JSON.stringify(entries)
+    if (!autosaveReadyRef.current) {
+      autosaveReadyRef.current = true
+      lastAutosavePayloadRef.current = payload
+      return undefined
+    }
+    if (payload === lastAutosavePayloadRef.current) return undefined
+
+    setAutosaveMessage('Autosaving...')
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch('/api/save-mods', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+          body: toFormBody(entries),
+        })
+        if (!response.ok) throw new Error(`Autosave failed (${response.status})`)
+        lastAutosavePayloadRef.current = payload
+        setAutosaveMessage('Autosaved')
+      } catch (error) {
+        setAutosaveMessage(error.message)
+      }
+    }, 900)
+
+    return () => window.clearTimeout(timer)
+  }, [modRows, modsAvailable, serverDir, serverName])
+
+  const fetchWorkshopDetails = async (index) => {
+    const workshopId = modRows[index]?.workshopId?.trim()
+    if (!workshopId) {
+      setFetchMessage('Enter a Workshop ID before fetching mod details.')
+      return
+    }
+    setFetchingIndex(index)
+    setFetchMessage('')
+    try {
+      const response = await fetch('/api/fetch-workshop-mod', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: new URLSearchParams([['workshop_id', workshopId]]),
+      })
+      if (!response.ok) throw new Error(`Request failed (${response.status})`)
+      const payload = await response.json()
+      if (!payload.ok) throw new Error(payload.message || 'Could not fetch Workshop details.')
+      setModRows((current) => current.map((row, rowIndex) => (
+        rowIndex === index
+          ? { ...row, displayName: payload.title || row.displayName, mod: (payload.modIds || []).join('\n'), workshopId: payload.workshopId || row.workshopId, imageUrl: payload.imageUrl || row.imageUrl }
+          : row
+      )))
+      setFetchMessage(`Fetched ${payload.modIds.length} Mod ID value(s) for ${payload.title}.`)
+    } catch (error) {
+      setFetchMessage(error.message)
+    } finally {
+      setFetchingIndex(null)
+    }
+  }
+
+  const exportMods = () => {
+    const normalizedRows = normalizeImportedModRows(modRows)
+    const enabledRows = normalizedRows.filter((row) => row.enabled !== false)
+    const payload = {
+      type: 'project-zomboid-server-manager-mods',
+      version: 1,
+      serverName,
+      exportedAt: new Date().toISOString(),
+      mods: enabledRows.flatMap((row) => splitModIds(row.mod).map((modId) => `\\${modId}`)).join(';'),
+      workshopItems: enabledRows.map((row) => row.workshopId.trim()).filter(Boolean).join(';'),
+      rows: normalizedRows,
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${serverName || 'server'}-mods-workshop.json`
+    link.click()
+    URL.revokeObjectURL(url)
+    setFetchMessage(`Exported ${normalizedRows.length} mod row(s).`)
+  }
+
+  const importMods = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    try {
+      const payload = JSON.parse(await file.text())
+      const rows = normalizeImportedModRows(payload.rows || payload.mods || payload)
+      if (!rows.length) throw new Error('Import file did not contain any mod rows.')
+      setModRows(rows)
+      setFetchMessage(`Imported ${rows.length} mod row(s). Review, then autosave or click Save.`)
+    } catch (error) {
+      setFetchMessage(error.message || 'Import failed.')
+    }
+  }
+
   return (
     <Panel title="Mods And Workshop Items" subtitle="Keep folder names, manager labels, and workshop IDs aligned." panelKey="mods-workshop">
       {page.mods.available ? (
-        <form className="form-grid" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-mods', [['server_dir', page.serverDir], ['server_name', page.serverName], ['ini_pair_mods', modRows.map((row) => row.mod)], ['mod_display_name', modRows.map((row) => row.displayName)], ['ini_pair_workshop', modRows.map((row) => row.workshopId)]], 'save-mods') }}>
+        <form className="form-grid" onSubmit={async (event) => { event.preventDefault(); await submitForm('/api/save-mods', buildModSaveEntries(serverDir, serverName, modRows), 'save-mods') }}>
           <div className="button-row top-actions">
-            <button type="button" className="secondary" onClick={() => setModRows((current) => [...current, { mod: '', displayName: '', workshopId: '' }])}>Add Mod + Workshop Row</button>
-            <button type="submit" disabled={busyAction === 'save-mods'}>Save Mods And Workshop Items</button>
+            <button type="submit" disabled={busyAction === 'save-mods'}>Save</button>
+            <button type="button" className="secondary" onClick={exportMods}>Export</button>
+            <button type="button" className="secondary" onClick={() => importInputRef.current?.click()}>Import</button>
+            <input ref={importInputRef} className="hidden-file-input" type="file" accept="application/json,.json" onChange={importMods} />
+            <span className="autosave-state">{autosaveMessage}</span>
           </div>
           <div className="paired-help">
-            <InfoBlock title="Display Name" body="Saved in this manager only. It does not get written into the server file." />
+            <InfoBlock title="Display Name" body="Fetched from the Steam Workshop title. It is saved in this manager only." />
             <InfoBlock title="Mod IDs" body={page.mods.modsHelp || 'Enter one or more Project Zomboid mod IDs for this workshop item.'} />
             <InfoBlock title="WorkshopItems" body={page.mods.workshopHelp} />
             <InfoBlock title="Workshop Link" body="Generated from the Workshop ID for quick opening." />
           </div>
-          <div className="table-head mods-grid"><span>Manager Label</span><span>Mod IDs</span><span>Workshop ID</span><span>Link</span><span>Actions</span></div>
+          {fetchMessage ? <div className="mod-fetch-message">{fetchMessage}</div> : null}
+          <div className="table-head mods-grid"><span>Order</span><span>Image</span><span>Enabled</span><span>Display Name</span><span>Mod IDs</span><span>Workshop ID</span><span>Link</span><span>Actions</span></div>
           <div className="row-stack">
             {modRows.map((row, index) => (
-              <div key={index} className="table-row mods-grid">
-                <input value={row.displayName} placeholder="Display name in manager only" onChange={(event) => setModRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, displayName: event.target.value } : item))} />
-                <input value={row.mod} placeholder="ModA, ModB" onChange={(event) => setModRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, mod: event.target.value } : item))} />
+              <div
+                key={index}
+                className={`table-row mods-grid ${draggedIndex === index ? 'dragging' : ''} ${dropIndex === index && draggedIndex !== index ? 'drop-target' : ''}`}
+                onDragOver={(event) => {
+                  event.preventDefault()
+                  setDropIndex(index)
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  setModRows((current) => reorderRows(current, draggedIndex, index))
+                  finishDrag()
+                }}
+              >
+                <button
+                  type="button"
+                  className="drag-handle"
+                  draggable
+                  aria-label={`Drag ${row.displayName || row.mod || `mod row ${index + 1}`} to reorder`}
+                  title="Drag to reorder"
+                  onDragStart={(event) => {
+                    setDraggedIndex(index)
+                    event.dataTransfer.effectAllowed = 'move'
+                    event.dataTransfer.setData('text/plain', String(index))
+                  }}
+                  onDragEnd={finishDrag}
+                >
+                  <span aria-hidden="true">::</span>
+                </button>
+                <div className="mod-thumb">
+                  {row.imageUrl ? <img src={row.imageUrl} alt="" loading="lazy" /> : <span>No image</span>}
+                </div>
+                <label className="toggle-field">
+                  <input
+                    type="checkbox"
+                    checked={row.enabled !== false}
+                    onChange={(event) => setModRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, enabled: event.target.checked } : item))}
+                  />
+                  <span>{row.enabled === false ? 'Disabled' : 'Enabled'}</span>
+                </label>
+                <div className="display-name-cell">{row.displayName || <span className="muted-text">Fetch from Workshop</span>}</div>
+                <textarea className="mod-id-list" value={row.mod} placeholder={'ModNameA\nModNameB\nModNameC'} onChange={(event) => setModRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, mod: event.target.value } : item))} />
                 <input value={row.workshopId} placeholder="Workshop ID" onChange={(event) => setModRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, workshopId: event.target.value } : item))} />
                 <div className="link-cell">{row.workshopId ? <a href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${row.workshopId}`} target="_blank" rel="noreferrer">Open Workshop Page</a> : <span className="muted-text">No ID</span>}</div>
                 <div className="row-actions">
-                  <button type="button" className="secondary slim" disabled={index === 0} onClick={() => setModRows((current) => moveRow(current, index, -1))}>Up</button>
-                  <button type="button" className="secondary slim" disabled={index === modRows.length - 1} onClick={() => setModRows((current) => moveRow(current, index, 1))}>Down</button>
+                  <button type="button" className="secondary slim" disabled={fetchingIndex === index || !row.workshopId.trim()} onClick={() => fetchWorkshopDetails(index)}>{fetchingIndex === index ? 'Fetching' : 'Fetch'}</button>
                   <button type="button" className="secondary slim" onClick={() => setModRows((current) => removeRow(current, index))}>Remove</button>
                 </div>
               </div>
             ))}
+          </div>
+          <div className="button-row bottom-actions">
+            <button type="button" className="secondary" onClick={() => setModRows((current) => [...current, { mod: '', displayName: '', workshopId: '', imageUrl: '', enabled: true }])}>Add Mod + Workshop Row</button>
           </div>
         </form>
       ) : <p className="empty-state">No Mods or WorkshopItems setting found in this `.ini` file.</p>}
@@ -391,15 +570,72 @@ function RawTextEditor({ title, path, value, onChange }) {
   )
 }
 
-function moveRow(rows, index, direction) {
-  const targetIndex = index + direction
-  if (targetIndex < 0 || targetIndex >= rows.length) return rows
+function removeRow(rows, index) {
+  if (rows.length <= 1) return [{ mod: '', displayName: '', workshopId: '', imageUrl: '', enabled: true }]
+  return rows.filter((_, itemIndex) => itemIndex !== index)
+}
+
+function reorderRows(rows, fromIndex, toIndex) {
+  if (fromIndex === null || fromIndex === undefined || toIndex === null || toIndex === undefined) return rows
+  if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= rows.length || toIndex >= rows.length) return rows
   const next = [...rows]
-  ;[next[index], next[targetIndex]] = [next[targetIndex], next[index]]
+  const [moved] = next.splice(fromIndex, 1)
+  next.splice(toIndex, 0, moved)
   return next
 }
 
-function removeRow(rows, index) {
-  if (rows.length <= 1) return [{ mod: '', displayName: '', workshopId: '' }]
-  return rows.filter((_, itemIndex) => itemIndex !== index)
+function splitModIds(value) {
+  return String(value || '')
+    .split(/[,\n;]+/)
+    .map((item) => item.trim().replace(/^[\\/]+/, ''))
+    .filter(Boolean)
+}
+
+function normalizeImportedModRows(value) {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((row) => row && typeof row === 'object')
+    .map((row) => {
+      const rawModIds = Array.isArray(row.modIds) ? row.modIds : splitModIds(row.mod)
+      return {
+        mod: rawModIds.length ? rawModIds.map((modId) => String(modId).trim().replace(/^[\\/]+/, '')).filter(Boolean).join('\n') : String(row.mod || ''),
+        displayName: String(row.displayName || row.title || ''),
+        workshopId: String(row.workshopId || row.workshopID || ''),
+        imageUrl: String(row.imageUrl || row.image || ''),
+        enabled: row.enabled !== false,
+      }
+    })
+    .filter((row) => row.mod || row.displayName || row.workshopId)
+}
+
+function buildModSaveEntries(serverDir, serverName, modRows) {
+  return [
+    ['server_dir', serverDir],
+    ['server_name', serverName],
+    ['ini_pair_mods', modRows.map((row) => row.mod)],
+    ['mod_display_name', modRows.map((row) => row.displayName)],
+    ['ini_pair_workshop', modRows.map((row) => row.workshopId)],
+    ['mod_image_url', modRows.map((row) => row.imageUrl || '')],
+    ['mod_enabled', modRows.map((row) => row.enabled === false ? 'false' : 'true')],
+  ]
+}
+
+function buildCommonSaveEntries(serverDir, serverName, serverConfigRaw) {
+  return [
+    ['server_dir', serverDir],
+    ['server_name', serverName],
+    ['server_config_raw', serverConfigRaw],
+  ]
+}
+
+function toFormBody(entries) {
+  const body = new URLSearchParams()
+  entries.forEach(([key, value]) => {
+    if (Array.isArray(value)) {
+      value.forEach((item) => body.append(key, item ?? ''))
+      return
+    }
+    body.append(key, value ?? '')
+  })
+  return body
 }

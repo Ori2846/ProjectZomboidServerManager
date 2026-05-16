@@ -6,6 +6,7 @@ import threading
 import time
 import urllib.request
 import zipfile
+from csv import DictReader, reader
 from pathlib import Path
 
 from .config import STEAM_APP_ID, STEAMCMD_DIR, STEAMCMD_DOWNLOAD_URL, STEAMCMD_EXE
@@ -14,6 +15,7 @@ from .state import STATE, save_state
 
 AUTO_UPDATE_CHECK_INTERVAL_SECONDS = 1800
 AUTO_UPDATE_THREAD_STARTED = False
+NETWORK_SAMPLE: dict[str, float | int | None] = {"time": 0.0, "received": None, "sent": None, "rx_bps": None, "tx_bps": None}
 STEAMCMD_LOCK = threading.Lock()
 
 
@@ -39,6 +41,7 @@ def is_server_running() -> bool:
         return True
 
     STATE.server_pid = None
+    STATE.server_started_at = None
     save_state()
     return False
 
@@ -64,6 +67,7 @@ def start_server() -> tuple[bool, str]:
     )
     STATE.server_process = process
     STATE.server_pid = process.pid
+    STATE.server_started_at = time.time()
     append_log_line(f"=== Starting server PID {process.pid}: {launch_command} ===")
     threading.Thread(target=stream_process_output, args=(process,), daemon=True).start()
     save_state()
@@ -117,6 +121,7 @@ def stop_server() -> tuple[bool, str]:
             pid = STATE.server_pid
             STATE.server_process = None
             STATE.server_pid = None
+            STATE.server_started_at = None
             append_log_line(f"=== Server process {pid} exited after quit command ===")
             save_state()
             return True, f"Stopped server PID {pid} with quit command"
@@ -133,6 +138,7 @@ def stop_server() -> tuple[bool, str]:
     pid = STATE.server_pid
     STATE.server_process = None
     STATE.server_pid = None
+    STATE.server_started_at = None
     append_log_line(f"=== Stopped server PID {pid} ===")
     save_state()
     return True, f"Stopped server PID {pid}"
@@ -150,7 +156,159 @@ def stream_process_output(process: subprocess.Popen[str]) -> None:
             append_log_line(f"=== Server process {process.pid} exited with code {process.returncode} ===")
             STATE.server_process = None
             STATE.server_pid = None
+            STATE.server_started_at = None
             save_state()
+
+
+def get_server_runtime_stats() -> dict[str, object]:
+    running = is_server_running()
+    uptime_seconds = int(max(0, time.time() - STATE.server_started_at)) if running and STATE.server_started_at else 0
+    process_stats = _read_process_tree_stats(STATE.server_pid) if running and STATE.server_pid else {}
+    network_stats = _read_network_throughput() if running else {"rxBps": None, "txBps": None}
+
+    return {
+        "running": running,
+        "pid": STATE.server_pid,
+        "uptimeSeconds": uptime_seconds,
+        "uptime": _format_duration(uptime_seconds) if uptime_seconds else "Starting",
+        "memoryMb": process_stats.get("memoryMb"),
+        "memory": _format_megabytes(process_stats.get("memoryMb")),
+        "processName": process_stats.get("name", "Unknown"),
+        "networkInBps": network_stats.get("rxBps"),
+        "networkOutBps": network_stats.get("txBps"),
+        "networkIn": _format_bytes_per_second(network_stats.get("rxBps")),
+        "networkOut": _format_bytes_per_second(network_stats.get("txBps")),
+        "commandChannel": command_channel_available(),
+    }
+
+
+def _read_process_stats(pid: int | None) -> dict[str, object]:
+    if pid is None:
+        return {}
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return {}
+
+    if result.returncode != 0 or not result.stdout.strip():
+        return {}
+    rows = list(reader(result.stdout.splitlines()))
+    if not rows or len(rows[0]) < 5 or rows[0][0].upper().startswith("INFO:"):
+        return {}
+    memory_kb = int(re.sub(r"\D", "", rows[0][4]) or "0")
+    return {"name": rows[0][0], "memoryMb": round(memory_kb / 1024, 1)}
+
+
+def _read_process_tree_stats(pid: int | None) -> dict[str, object]:
+    if pid is None:
+        return {}
+    try:
+        result = subprocess.run(
+            ["wmic", "process", "get", "ProcessId,ParentProcessId,Name,WorkingSetSize", "/format:csv"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return _read_process_stats(pid)
+
+    if result.returncode != 0 or not result.stdout.strip():
+        return _read_process_stats(pid)
+
+    rows = [row for row in DictReader(line for line in result.stdout.splitlines() if line.strip()) if row.get("ProcessId")]
+    children_by_parent: dict[int, list[dict[str, str]]] = {}
+    by_pid: dict[int, dict[str, str]] = {}
+    for row in rows:
+        try:
+            row_pid = int(row.get("ProcessId", "0"))
+            parent_pid = int(row.get("ParentProcessId", "0"))
+        except ValueError:
+            continue
+        by_pid[row_pid] = row
+        children_by_parent.setdefault(parent_pid, []).append(row)
+
+    if pid not in by_pid:
+        return _read_process_stats(pid)
+
+    stack = [pid]
+    process_ids = set()
+    while stack:
+        current_pid = stack.pop()
+        if current_pid in process_ids:
+            continue
+        process_ids.add(current_pid)
+        stack.extend(int(child["ProcessId"]) for child in children_by_parent.get(current_pid, []) if child.get("ProcessId", "").isdigit())
+
+    tree_rows = [by_pid[tree_pid] for tree_pid in process_ids if tree_pid in by_pid]
+    memory_bytes = sum(int(row.get("WorkingSetSize", "0") or "0") for row in tree_rows)
+    process_names = [row.get("Name", "").strip() for row in tree_rows if row.get("Name", "").strip()]
+    primary_name = next((name for name in process_names if "java" in name.lower()), process_names[0] if process_names else "Unknown")
+    return {
+        "name": primary_name if len(process_names) <= 1 else f"{primary_name} +{len(process_names) - 1}",
+        "memoryMb": round(memory_bytes / 1024 / 1024, 1),
+    }
+
+
+def _read_network_throughput() -> dict[str, float | None]:
+    try:
+        result = subprocess.run(["netstat", "-e"], capture_output=True, text=True, check=False)
+    except OSError:
+        return {"rxBps": None, "txBps": None}
+
+    match = re.search(r"^\s*Bytes\s+([\d,]+)\s+([\d,]+)", result.stdout, re.MULTILINE)
+    if result.returncode != 0 or not match:
+        return {"rxBps": None, "txBps": None}
+
+    now = time.time()
+    received = int(match.group(1).replace(",", ""))
+    sent = int(match.group(2).replace(",", ""))
+    previous_time = NETWORK_SAMPLE["time"]
+    previous_received = NETWORK_SAMPLE["received"]
+    previous_sent = NETWORK_SAMPLE["sent"]
+    if isinstance(previous_time, float) and isinstance(previous_received, int) and isinstance(previous_sent, int) and now > previous_time:
+        elapsed = max(0.001, now - previous_time)
+        NETWORK_SAMPLE["rx_bps"] = max(0.0, (received - previous_received) / elapsed)
+        NETWORK_SAMPLE["tx_bps"] = max(0.0, (sent - previous_sent) / elapsed)
+    NETWORK_SAMPLE["time"] = now
+    NETWORK_SAMPLE["received"] = received
+    NETWORK_SAMPLE["sent"] = sent
+    return {"rxBps": NETWORK_SAMPLE["rx_bps"], "txBps": NETWORK_SAMPLE["tx_bps"]}
+
+
+def _format_duration(seconds: int) -> str:
+    days, remainder = divmod(seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if days:
+        return f"{days}d {hours}h"
+    if hours:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m {seconds}s"
+
+
+def _format_megabytes(value: object) -> str:
+    if not isinstance(value, (int, float)):
+        return "Unavailable"
+    if value >= 1024:
+        return f"{value / 1024:.1f} GB"
+    return f"{value:.1f} MB"
+
+
+def _format_bytes_per_second(value: object) -> str:
+    if not isinstance(value, (int, float)):
+        return "Sampling"
+    units = ["B/s", "KB/s", "MB/s", "GB/s"]
+    current = float(value)
+    for unit in units:
+        if current < 1024 or unit == units[-1]:
+            return f"{current:.1f} {unit}"
+        current /= 1024
+    return "Sampling"
 
 
 def _appmanifest_path() -> Path:

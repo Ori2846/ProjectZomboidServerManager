@@ -67,6 +67,7 @@ function App() {
   const [steamcmdLogs, setSteamcmdLogs] = useState([])
   const [liveRunning, setLiveRunning] = useState(false)
   const [liveServerPid, setLiveServerPid] = useState(null)
+  const [serverStats, setServerStats] = useState(null)
   const [updateState, setUpdateState] = useState({ running: false, progress: 0, message: 'Idle', steamcmdPath: '' })
   const [consoleCommand, setConsoleCommand] = useState('')
   const [resetConfirmation, setResetConfirmation] = useState('')
@@ -79,7 +80,7 @@ function App() {
   const [profileNameInput, setProfileNameInput] = useState('')
   const [targetForm, setTargetForm] = useState({ serverDir: '', serverName: '' })
   const [launchForm, setLaunchForm] = useState({ launchCommand: '', launchWorkdir: '' })
-  const [commonValues, setCommonValues] = useState({})
+  const [serverConfigRaw, setServerConfigRaw] = useState('')
   const [modRows, setModRows] = useState([])
   const [sandboxRaw, setSandboxRaw] = useState('')
   const [advancedValues, setAdvancedValues] = useState({})
@@ -93,6 +94,7 @@ function App() {
       setSteamcmdLogs(nextPage.steamcmdLogs || [])
       setLiveRunning(Boolean(nextPage.running))
       setLiveServerPid(nextPage.serverPid ?? null)
+      setServerStats(nextPage.serverStats || null)
       setUpdateState(nextPage.update || { running: false, progress: 0, message: 'Idle', steamcmdPath: '' })
       setClientStatus(null)
     })
@@ -115,8 +117,8 @@ function App() {
     setProfileNameInput(page.selectedProfile)
     setTargetForm({ serverDir: page.serverDir, serverName: page.serverName })
     setLaunchForm({ launchWorkdir: page.launchWorkdir })
-    setCommonValues(Object.fromEntries(page.commonSettings.map((field) => [field.key, field.value])))
-    setModRows(page.mods.rows.length ? page.mods.rows : [{ mod: '', displayName: '', workshopId: '' }])
+    setServerConfigRaw(page.serverConfig?.rawText || '')
+    setModRows(page.mods.rows.length ? page.mods.rows : [{ mod: '', displayName: '', workshopId: '', imageUrl: '', enabled: true }])
     setSandboxRaw(page.sandbox.rawText)
     setAdvancedValues(Object.fromEntries(page.advancedFiles.map((file) => [file.label, file.content])))
     setSelectedAdvancedFile((current) => (page.advancedFiles.some((file) => file.label === current) ? current : page.advancedFiles[0]?.label ?? ''))
@@ -138,6 +140,7 @@ function App() {
     setSteamcmdLogs(payload.steamcmdLines || [])
     setLiveRunning(Boolean(payload.running))
     setLiveServerPid(payload.pid ?? null)
+    setServerStats(payload.serverStats || null)
     setUpdateState(payload.update || { running: false, progress: 0, message: 'Idle', steamcmdPath: '' })
   })
 
@@ -206,6 +209,37 @@ function App() {
           </div>
         </div>
       </header>
+
+      {liveRunning ? (
+        <section className="server-stats-strip" aria-label="Live server stats">
+          <div className="server-stat-card primary">
+            <span>Uptime</span>
+            <strong>{serverStats?.uptime || 'Starting'}</strong>
+          </div>
+          <div className="server-stat-card">
+            <span>Memory</span>
+            <strong>{serverStats?.memory || 'Unavailable'}</strong>
+          </div>
+          <div className="server-stat-card">
+            <span>Network In</span>
+            <strong>{serverStats?.networkIn || 'Sampling'}</strong>
+          </div>
+          <div className="server-stat-card">
+            <span>Network Out</span>
+            <strong>{serverStats?.networkOut || 'Sampling'}</strong>
+          </div>
+          <div className="server-stat-card">
+            <span>Process</span>
+            <strong>{serverStats?.processName || 'Unknown'}</strong>
+            <small>{liveServerPid ? `PID ${liveServerPid}` : 'PID unavailable'}</small>
+          </div>
+          <div className={`server-stat-card ${serverStats?.commandChannel ? 'healthy' : 'warning'}`}>
+            <span>Console</span>
+            <strong>{serverStats?.commandChannel ? 'Ready' : 'Detached'}</strong>
+            <small>{serverStats?.accessUrl || page.accessUrl}</small>
+          </div>
+        </section>
+      ) : null}
 
       <div className="app-frame">
         <aside className="sidebar">
@@ -300,8 +334,8 @@ function App() {
             setTargetForm={setTargetForm}
             launchForm={launchForm}
             setLaunchForm={setLaunchForm}
-            commonValues={commonValues}
-            setCommonValues={setCommonValues}
+            serverConfigRaw={serverConfigRaw}
+            setServerConfigRaw={setServerConfigRaw}
             modRows={modRows}
             setModRows={setModRows}
             sandboxRaw={sandboxRaw}
